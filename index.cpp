@@ -3,118 +3,22 @@
 #include <SFML/System.hpp>
 #include <SFML/Window.hpp>
 #include <SFML/Audio.hpp>
+#include "./Utility-Classes/displayQueue.h"
 #include "./Screens/loading.h"
+#include "./Game-Classes/Plot.h"
+
 using namespace std;
 using namespace sf;
 
-typedef bool (*drawerFunction)(RenderWindow &window);
-
-class displayQueue
-{
-    drawerFunction *queue;
-    int length = 0;
-    static bool emptyFunction(RenderWindow &window) {return true;};
-
-public:
-    displayQueue()
-    {
-        queue = nullptr;
-    }
-    void pushBack(drawerFunction func)
-    {
-        drawerFunction *temp = new drawerFunction[length + 1];
-        if (queue != nullptr)
-        {
-            for (int i = 0; i < length; i++)
-            {
-                temp[i] = queue[i];
-            }
-        }
-        temp[length] = func;
-        delete[] queue;
-        queue = temp;
-        length++;
-    }
-    void pop()
-    {
-        if (length <= 0)
-        {
-            length = 0;
-            return;
-        }
-        else if (length == 1)
-        {
-            delete[] queue;
-            queue = nullptr;
-            length = 0;
-            return;
-        }
-        drawerFunction *temp = new drawerFunction[length - 1];
-        for (int i = 0; i < length - 1; i++)
-        {
-            temp[i] = queue[i];
-        }
-        delete[] queue;
-        queue = temp;
-        length--;
-    }
-    void remove(int index)
-    {
-        if (index < 0 || index >= length)
-            return;
-
-        if (length == 1)
-        {
-            delete[] queue;
-            queue = nullptr;
-            length = 0;
-            return;
-        }
-
-        drawerFunction *temp = new drawerFunction[length - 1];
-        int tempIdx = 0;
-        for (int i = 0; i < length; i++)
-        {
-            if (i == index)
-                continue; // Skip the one we are removing
-            temp[tempIdx] = queue[i];
-            tempIdx++;
-        }
-        delete[] queue;
-        queue = temp;
-        length--;
-    }
-    void runAll(RenderWindow &window)
-    {
-        for (int i = 0; i < length; i++)
-        {
-            if (queue[i](window))
-            {
-                queue[i] = emptyFunction;
-            }
-        }
-        for (int i = 0; i < length; i++)
-        {
-            if (queue[i] == emptyFunction)
-            {
-                remove(i);
-                i--;
-            }
-        }
-    }
-    ~displayQueue()
-    {
-        delete[] queue;
-        length = 0; // LoL
-    }
-};
-
+displayQueue queue;
+EventHandler towerMenuEvents;
+EventHandler anchorHover;
 int main()
 {
+    anchorHover.resume();
     ContextSettings settings;
     settings.antiAliasingLevel = 8;
-    displayQueue queue;
-    RenderWindow window(VideoMode({1100, 600}), "Tower Defense", Style::Default, State::Windowed, settings);
+    RenderWindow window(VideoMode({1200, 700}), "Tower Defense", Style::Default, State::Windowed, settings);
     queue.pushBack(drawLoadingScreen);
     loadScreen(window);
     while (window.isOpen())
@@ -125,6 +29,30 @@ int main()
             {
                 window.close();
             }
+            if (const auto *mouseMoved = event->getIf<Event::MouseButtonPressed>())
+            {
+                Vector2f mousePos = Vector2f(mouseMoved->position);
+
+                float screenX = mousePos.x, screenY = mousePos.y;
+                float dx = screenX - originX;
+                float dy = screenY - originY;
+
+                float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
+                float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
+
+                int tileCol = (int)floor(col) - 1;
+                int tileRow = (int)floor(row);
+
+                cout<< "Clicked: " << tileRow << " , " << tileCol<<endl;
+                cout<<"<"<<screenX<<" , "<<screenY<<"> .. Dir = "<<grid[tileRow][tileCol]->getDirection()<<endl;
+                if (tileRow >= 0 && tileRow < rows && tileCol >= 0 && tileCol < cols)
+                {
+                    handler.handleClick(tileRow, tileCol);
+                }
+                
+            }
+            anchorHover.handleEvents(*event);
+            towerMenuEvents.handleEvents(*event);
         }
         window.clear(Color(29, 29, 29));
         queue.runAll(window);

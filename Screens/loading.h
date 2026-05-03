@@ -4,9 +4,14 @@
 #include <math.h>
 #include <SFML/Window.hpp>
 #include "../Utility-Classes/RoundedRectangle.cpp"
+#include"../Utility-Classes/displayQueue.h"
+#include "../Game-Classes/Plot.h"
+#include "../Game-Classes/Enemy.h"
 using namespace std;
 using namespace sf;
 
+
+extern displayQueue queue;
 Font myFont("/home/shaaf/Desktop/Tower-Defense/Fonts/GameBox-Regular.ttf");
 RoundedRectangle progressContainer;
 RoundedRectangle progressBar;
@@ -70,7 +75,7 @@ void drawBottleNeck(RenderWindow &win)
         {
             break;
         }
-        bottle[i].move({6.0f, 0});
+        bottle[i].move({4.0f, 0});
     }
 
     for (int i = 0; i < 4; i++)
@@ -79,7 +84,7 @@ void drawBottleNeck(RenderWindow &win)
         {
             break;
         }
-        neck[i].move({-6.0f, 0});
+        neck[i].move({-4.0f, 0});
     }
 }
     for (int i = 0; i < 6; i++)
@@ -110,6 +115,13 @@ float drawProgressBar(RenderWindow& win)
 bool drawLoadingScreen(RenderWindow& window){
     drawBottleNeck(window);
     float i = drawProgressBar(window);
-    if(i >= 1) return true;
+    if(i >= 0.05)
+    {
+        window.clear();
+        loadGrid();
+        queue.pushBack(drawGrid);
+        queue.pushBack(drawEnemy);
+        return true;
+    }
     else return false;
 }
