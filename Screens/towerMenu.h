@@ -1,10 +1,11 @@
+#pragma once
 #include<iostream>
 #include<SFML/Graphics.hpp>
 #include"../Utility-Classes/displayQueue.h"
 using namespace sf;
 using namespace std;
 
-bool stopDrawing = false;
+bool stopDrawing = true;
 float r1 = 70, r2 = 110;
 CircleShape inner(r1);
 CircleShape outer(r2);

@@ -32,6 +32,45 @@ void placeHolderFunction(Plot *object)
     // DOES NOTHING
 }
 
+pair<int,int> screenToTile(float screenX, float screenY)
+{
+    float dx = screenX - (originX + tileW / 2.f);
+    float dy = screenY - originY;
+
+    float fcol = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
+    float frow = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
+
+    int baseRow = (int)floor(frow);
+    int baseCol = (int)floor(fcol);
+
+    // Check this tile and its 3 neighbours, pick closest center
+    int bestRow = baseRow, bestCol = baseCol;
+    float bestDist = __FLT_MAX__;
+
+    for (int dr = 0; dr <= 1; dr++)
+    {
+        for (int dc = 0; dc <= 1; dc++)
+        {
+            int r = baseRow + dr;
+            int c = baseCol + dc;
+
+            // Get screen center of this candidate tile
+            float cx = (originX + tileW / 2.f) + (c - r) * (tileW / 2.f);
+            float cy = originY + (c + r) * (tileH / 2.f) + tileH / 2.f;
+
+            float dist = (screenX - cx) * (screenX - cx) + (screenY - cy) * (screenY - cy);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestRow = r;
+                bestCol = c;
+            }
+        }
+    }
+
+    return { bestRow, bestCol };
+}
+
 class Plot
 {
 protected:
@@ -87,6 +126,8 @@ public:
     {
         return plotBase.getPosition();
     }
+    int getRow(){return location[0];}
+    int getCol(){return location[1];}
 };
 
 class simplePlot : public Plot
@@ -166,6 +207,58 @@ public:
         }
     }
 };
+class EnemyManager
+{
+    int **info = nullptr;
+    Tower** towersArray;
+    int count = 0;
+
+public:
+    void pushBack(Vector2i loc, int radius,Tower* ptr)
+    {
+        int **temp = new int *[count + 1];
+        for (int i = 0; i < count; i++)
+        {
+            temp[i] = new int[3];
+            for (int j = 0; j < 3; j++)
+            temp[i][j] = info[i][j];
+        }
+        temp[count] = new int[3];
+        temp[count][0] = loc.x;
+        temp[count][1] = loc.y;
+        temp[count][2] = radius;
+        for (int i = 0; i < count; i++)
+        {
+            delete[] info[i];
+        }
+        delete[] info;
+        info = temp;
+        Tower** tempT = new Tower*[count];
+        for(int i=0;i<count;i++){
+            tempT[i]= towersArray[i];
+        }
+        tempT[count] = ptr;
+        delete[] towersArray;
+        towersArray = tempT;
+        count++;
+    }
+    void poll(Vector2i loc, Vector2f pos, float speed)
+    {
+        int cRow = loc.x, cCol = loc.y;
+        for (int i = 0; i < count; i++)
+        {
+            if (cRow <= info[i][0] + info[i][2] && cRow >= info[i][0] - info[i][2])
+            {
+                if (cCol <= info[i][1] + info[i][2] && cCol >= info[i][1] - info[i][2])
+                {
+                    towersArray[i]->attack(pos, speed);
+                }
+            }
+        }
+    }
+};
+
+EnemyManager masterManager;
 
 void towerMenu(Plot *object);
 void hover(const Event &ev);
@@ -188,7 +281,6 @@ public:
         projection.setTexture(&towerHoverTexture);
         projection.setScale({0.2, 0.2f});
         projection.setOrigin({0, projection.getSize().y});
-        anchorHover.addEvent(hover);
     }
     void draw(RenderWindow &window)
     {
@@ -209,18 +301,30 @@ public:
     void setPosition(Vector2f pos)
     {
         plotBase.setPosition(pos);
-        projection.setPosition(pos);
+        projection.setPosition({pos.x , pos.y + tileH*1.5f});
         cout << "Projection : " << projection.getPosition().x << " , " << projection.getPosition().y << endl;
     }
     void buildTower(int a)
     {
         if (a == 0)
         {
-            towerPointer = new ArcherTower(location[0], location[1]);
+            towerPointer = new IceTower(location[0], location[1]);
             Vector2f pos = this->getPosition();
-            towerPointer->setPosition({pos.x + tileW / 2.f, pos.y}); // top tip of diamond
+            towerPointer->setPosition({pos.x + tileW / 2.f, pos.y + tileH*1.5f});
+            masterManager.pushBack({location[0] , location[1]}, towerPointer->getRadius(), towerPointer);
             isOccupied = true;
         }
+    }
+    bool occupationStatus(){
+        return isOccupied;
+    }
+    void invokeTower(Vector2f enemyPos, float enemySpeed){
+        cout<<"Tower Invoked..........\n";
+    }
+    int getRadius(){
+        cerr<<"Inside Plot...";
+
+        return  towerPointer->getRadius();
     }
 };
 
@@ -243,10 +347,11 @@ void click(const Event &ev)
         if (tower.getGlobalBounds().contains(mousePos))
         {
             cerr << "Arrow Tower Has been Selected...\n";
-            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[openAnchorRow][openAnchorCol]);
             if (!plot->isOccupied)
             {
                 plot->buildTower(0);
+
             }
             stopDrawing = true;
             handler.resume();
@@ -254,69 +359,42 @@ void click(const Event &ev)
             anchorHover.resume();
         }
     }
-    else if (ev.getIf<Event::MouseMoved>())
-    {
-        Vector2f mousePos = Vector2f(ev.getIf<Event::MouseMoved>()->position);
-        float screenX = mousePos.x, screenY = mousePos.y;
-        float dx = screenX - originX;
-        float dy = screenY - originY;
-
-        float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
-        float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
-
-        int tileCol = (int)floor(col) - 1;
-        int tileRow = (int)floor(row);
-        if (tileRow == 24 && tileCol == 27)
-        {
-            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
-            plot->drawProjection = true;
-        }
-        else
-        {
-            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
-            plot->drawProjection = false;
-        }
-    }
 }
 
 void hover(const Event &ev)
 {
-
+    static anchorPlot *lastHovered = nullptr;
     if (ev.getIf<Event::MouseMoved>())
     {
-        Vector2f mousePos = Vector2f(ev.getIf<Event::MouseMoved>()->position);
-        float screenX = mousePos.x, screenY = mousePos.y;
-        float dx = screenX - originX;
-        float dy = screenY - originY;
+        Vector2f mouse = Vector2f(ev.getIf<Event::MouseMoved>()->position);
+        auto [tileRow, tileCol] = screenToTile(mouse.x, mouse.y);
 
-        float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
-        float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
-
-        int tileCol = (int)floor(col) - 1;
-        int tileRow = (int)floor(row);
-        if (tileRow == 24 && tileCol == 27 || tileRow == 27 && tileCol == 23)
+        if (lastHovered != nullptr)
         {
-            // cerr<<"HOVERING...";
-            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[tileRow][tileCol]);
-            plot->drawProjection = true;
+            lastHovered->drawProjection = false;
+            lastHovered = nullptr;
         }
-        else
+
+        if (tileRow >= 0 && tileRow < rows && tileCol >= 0 && tileCol < cols)
         {
-            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
-            plot->drawProjection = false;
-            plot = dynamic_cast<anchorPlot *>(grid[27][23]);
-            plot->drawProjection = false;
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[tileRow][tileCol]);
+            if (plot != nullptr)
+            {
+                lastHovered = plot; // always update lastHovered
+                if ((!plot->occupationStatus() && stopDrawing))
+                    plot->drawProjection = true; // only show if unoccupied
+            }
         }
     }
 }
-
 void towerMenu(Plot *object)
 {
     stopDrawing = false;
+    openAnchorRow = object->getRow();
+    openAnchorCol = object->getCol();
     handler.pause();
     initiateTowerMenu(object->getPosition());
     queue.pushBack(drawTowerMenu);
-    towerMenuEvents.addEvent(click);
     towerMenuEvents.resume();
     anchorHover.pause();
 }
@@ -334,13 +412,19 @@ void loadGrid()
             float screenX = originX + (j - i) * (tileW / 2);
             float screenY = originY + (j + i) * (tileH / 2);
 
-            if (i == 24 && j == 27 || i == 27 && j == 23)
+            if (i == 19 && j == 14 || i == 22 && j == 23 || i==12 && j== 24)
             {
                 grid[i][j] = new anchorPlot();
             }
             else if (i == 20 || i == 21 || j == 21 || j == 22)
             {
                 grid[i][j] = new pathPlot();
+                if(j==21 || j==22){
+                    grid[i][j]->direction = 2;
+                }
+                else{
+                    grid[i][j]->direction = 1;
+                }
             }
             else
             {
@@ -353,24 +437,16 @@ void loadGrid()
             grid[i][j]->location[1] = j;
         }
     }
+    anchorHover.addEvent(hover);
+    towerMenuEvents.addEvent(click);
 }
 
 int getDirection(float screenX, float screenY)
 {
-    float dx = screenX - originX;
-    float dy = screenY - originY;
-
-    float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
-    float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
-
-    int tileCol = (int)floor(col) - 1;
-    int tileRow = (int)floor(row);
-    int r = 0;
+    auto [tileRow, tileCol] = screenToTile(screenX, screenY);
     if (tileRow >= 0 && tileRow < rows && tileCol >= 0 && tileCol < cols)
-    {
-        r = grid[tileRow][tileCol]->getDirection();
-    }
-    return r;
+        return grid[tileRow][tileCol]->getDirection();
+    return 0;
 }
 
 bool drawGrid(RenderWindow &window)

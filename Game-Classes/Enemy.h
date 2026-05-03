@@ -2,39 +2,43 @@
 #include <SFML/Graphics.hpp>
 #include <iostream>
 #include "Plot.h"
+#include "Tower.h"
 #include "masterFile.h"
 using namespace std;
 using namespace sf;
 
-
+extern Plot *grid[rows][cols];
 class Enemy : public Entity
 {
 protected:
+    Vector2i lastTile;
     Vector2f position;
     int strengthLevel;
     float attackDelay; // ms
     std::optional<Sprite> characterBase;
     int currentFrame;
     float moveSpeed = 1.0f;
+
 public:
     Clock clk;
     Enemy()
     {
+        lastTile = {-1, -1};
         position = {0.0f, 0.0f};
         strengthLevel = 1;
         attackDelay = 1400;
     }
 
-    virtual void moveDown() =0;
-    virtual void moveRight() =0;
-    virtual void moveUp() =0;
-    virtual void moveLeft() =0;
-    virtual void attack() =0;
+    virtual void moveDown() = 0;
+    virtual void moveRight() = 0;
+    virtual void moveUp() = 0;
+    virtual void moveLeft() = 0;
+    virtual void attack() = 0;
 };
+
 
 Texture emptyTexture("/home/shaaf/Desktop/Tower-Defense/Assets/enemeies/Monster_10/PNG/PNG/Idle/7.png");
 Texture idle[18];
-
 class Goblin : public Enemy
 {
 public:
@@ -64,19 +68,25 @@ public:
     }
     void moveDown()
     {
-        characterBase->move({moveSpeed , moveSpeed/2.0f});
+        characterBase->move({moveSpeed, moveSpeed / 2.0f});
+        position = characterBase->getPosition();
     }
-    void moveRight(){
-        characterBase->move({moveSpeed , -moveSpeed/2.0f});
+    void moveRight()
+    {
+        characterBase->move({moveSpeed, -moveSpeed / 2.0f});
+        position = characterBase->getPosition();
     }
-    void moveLeft(){
-        
+    void moveLeft()
+    {
+        characterBase->move({-moveSpeed, moveSpeed / 2.0f});
+        position = characterBase->getPosition();
     }
-    void moveUp(){
-
+    void moveUp()
+    {
+        position = characterBase->getPosition();
     }
-    void attack(){
-
+    void attack()
+    {
     }
     void draw(RenderWindow &window)
     {
@@ -86,20 +96,27 @@ public:
             currentFrame = (currentFrame + 1) % 17;
             characterBase->setTexture(idle[currentFrame]);
             characterBase->setScale({0.2f, 0.2f});
-            characterBase->setTextureRect({{140,60},{220,220}});
+            characterBase->setTextureRect({{140, 60}, {220, 220}});
             Vector2f pos = characterBase->getPosition();
-            int dir = getDirection(pos.x , pos.y);
-            // cerr<<"Move..dir = "<<dir<<endl;
+            auto [row, col] = screenToTile(pos.x, pos.y);
+            Vector2i currentTile = {row, col};
+            if (currentTile != lastTile)
+            {
+                masterManager.poll(currentTile, position, moveSpeed);
+            }
+            int dir = grid[row][col]->getDirection();
             switch (dir)
             {
             case 0:
                 break;
             case 1:
-                // moveDown();
+                moveDown();
                 break;
             case 2:
                 moveRight();
                 break;
+            case 3:
+                moveLeft();
             default:
                 break;
             }

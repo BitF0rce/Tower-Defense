@@ -6,6 +6,7 @@
 using namespace std;
 using namespace sf;
 
+int openAnchorRow =0 , openAnchorCol = 0; 
 Texture archer("/home/shaaf/Desktop/Tower-Defense/Assets/towers.png");
 class Tower: public Entity{
     protected:
@@ -28,26 +29,52 @@ class Tower: public Entity{
     virtual void draw(RenderWindow& window){
         window.draw(towerBase);
     }
-    virtual void attack()=0;
+    virtual void attack(Vector2f pos, float speed)=0;
     virtual void setPosition(Vector2f pos){
         towerBase.setPosition(pos);
+    }
+    virtual void scanTiles(){
+        for(int i=0;i<4;i++){
+        }
+    }
+    virtual int getRadius(){
+        cerr<<"Inside Tower...";
+        return attackRadius;
     }
 };
 
 class ArcherTower:public Tower{
     public:
     ArcherTower(int a, int b): Tower(a,b){
-        attackRadius = 50;
+        attackRadius = 4;
         towerBase.setSize({112.f , 137.f});
         towerBase.setOrigin({56.f, 137.f});
         towerBase.setTexture(&archer);
         towerBase.setTextureRect({{14,14},{126,151}});
         towerBase.setScale({0.4f, 0.4f});
+        // towerBase.setOutlineColor(Color::Black);
+        // towerBase.setOutlineThickness(5);
     }
-    void attack(){
-
+    void attack(Vector2f pos, float speed){
     }
 };
+
+
+class IceTower:public Tower{
+    public:
+    IceTower(int a, int b): Tower(a,b){
+        attackRadius = 4;
+        towerBase.setSize({122.f , 158.f});
+        towerBase.setOrigin({61.f, 158.f});
+        towerBase.setTexture(&archer);
+        towerBase.setTextureRect({{412,191},{113,155}});
+        towerBase.setScale({0.4f, 0.4f});
+    }
+    void attack(Vector2f pos, float speed){
+        cerr<<"Enemy ja raha hai , Pakro !!!!\n";
+    }
+};
+
 
 // AnchroPlot holds Tower*
 // Menu Chooses a Tower -> Tower* becomes the selected tower

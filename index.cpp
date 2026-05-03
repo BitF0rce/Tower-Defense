@@ -32,24 +32,12 @@ int main()
             if (const auto *mouseMoved = event->getIf<Event::MouseButtonPressed>())
             {
                 Vector2f mousePos = Vector2f(mouseMoved->position);
+                auto [tileRow, tileCol] = screenToTile(mousePos.x, mousePos.y);
 
-                float screenX = mousePos.x, screenY = mousePos.y;
-                float dx = screenX - originX;
-                float dy = screenY - originY;
+                cout << "Clicked: " << tileRow << " , " << tileCol << endl;
 
-                float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
-                float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
-
-                int tileCol = (int)floor(col) - 1;
-                int tileRow = (int)floor(row);
-
-                cout<< "Clicked: " << tileRow << " , " << tileCol<<endl;
-                cout<<"<"<<screenX<<" , "<<screenY<<"> .. Dir = "<<grid[tileRow][tileCol]->getDirection()<<endl;
                 if (tileRow >= 0 && tileRow < rows && tileCol >= 0 && tileCol < cols)
-                {
                     handler.handleClick(tileRow, tileCol);
-                }
-                
             }
             anchorHover.handleEvents(*event);
             towerMenuEvents.handleEvents(*event);
