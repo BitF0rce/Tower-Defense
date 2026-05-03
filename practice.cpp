@@ -1,86 +1,171 @@
-#include <iostream>
 #include <SFML/Graphics.hpp>
-#include <SFML/System.hpp>
-#include <SFML/Window.hpp>
-#include <cmath>
+#include <iostream>
+
 using namespace std;
 using namespace sf;
 
-int main()
+int main(int argc, char* argv[])
 {
-    ContextSettings settings;
-    settings.antiAliasingLevel = 8;
-    RenderWindow window(VideoMode({1200, 700}), "Tower Defense", Style::Default, State::Windowed, settings);
-
-    Texture Path("./Assets/isometric/separated-images/tile_009.png");
-    Texture Path2("./Assets/isometric/separated-images/tile_061.png");
-    cout << Path.getSize().x << " , " << Path.getSize().y;
-    float tileW = 64, tileH = 32, originX = 500.0f, originY = 50.0f;
-    ConvexShape grid[10][10];
-    for (int i = 0; i < 10; i++)
+    if (argc < 2)
     {
-        for (int j = 0; j < 10; j++)
-        {
-            grid[i][j].setPointCount(6); 
-            grid[i][j].setPoint(0, {tileW / 2.f, 0.f});
-            grid[i][j].setPoint(1, {tileW, tileH});
-            grid[i][j].setPoint(2, {tileW, tileH + (0.4f * tileH)});
-            grid[i][j].setPoint(3, {tileW / 2.f, tileH * 2});
-            grid[i][j].setPoint(4, {0.f, tileH + (0.4f * tileH)});
-            grid[i][j].setPoint(5, {0.f, tileH});
-
-            float screenX = originX + (j - i) * (tileW / 2);
-            float screenY = originY + (j + i) * (tileH / 2);
-            grid[i][j].setPosition({screenX, screenY});
-            if (i == 0 || j == 0 || i == 9 || j == 9)
-            {
-                grid[i][j].setTexture(&Path2);
-            }
-            else
-            {
-                grid[i][j].setTexture(&Path);
-            }
-            grid[i][j].setTextureRect(IntRect({0, 0}, {32, 32}));
-        }
+        cerr << "Usage: ./pixel_picker <image_path>\n";
+        return 1;
     }
+
+    // Load texture and image (image for pixel data, texture for rendering)
+    Texture texture(argv[1]);
+    Image image = texture.copyToImage();
+
+    Vector2u imgSize = texture.getSize();
+    Sprite sprite(texture);
+
+    // Open window same size as image (capped at 1200x800)
+    unsigned int winW = min(imgSize.x, 1200u);
+    unsigned int winH = min(imgSize.y, 800u);
+
+    RenderWindow window(VideoMode({winW, winH}), "Pixel Picker - " + string(argv[1]));
+    window.setFramerateLimit(60);
+
+    // Scale sprite to fit window if image is larger
+    float scaleX = (float)winW / imgSize.x;
+    float scaleY = (float)winH / imgSize.y;
+    sprite.setScale({scaleX, scaleY});
+
+    // For drawing selection rectangle
+    RectangleShape selection;
+    selection.setFillColor(Color(255, 255, 0, 60));
+    selection.setOutlineColor(Color::Yellow);
+    selection.setOutlineThickness(1.f);
+
+    Vector2i clickStart = {-1, -1};
+    Vector2i clickEnd   = {-1, -1};
+    bool dragging = false;
+
+    // Font for overlay text
+    Font font;
+    bool hasFont = false;
+    // Try common system font locations
+    for (auto& path : {
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+    }) {
+        if (font.openFromFile(path)) { hasFont = true; break; }
+    }
+
+    Text infoText(font);
+    infoText.setCharacterSize(14);
+    infoText.setFillColor(Color::Yellow);
+    infoText.setOutlineColor(Color::Black);
+    infoText.setOutlineThickness(1.f);
+    infoText.setPosition({5.f, 5.f});
+    infoText.setString("Click to get pixel coords.\nClick and drag to get IntRect.");
+
+    string lastInfo = "Click to get pixel coords.\nClick and drag to get IntRect.";
+
     while (window.isOpen())
     {
-        while (const std::optional event = window.pollEvent())
+        while (const optional event = window.pollEvent())
         {
             if (event->is<Event::Closed>())
-            {
                 window.close();
-            }
-            if (const auto *mouse = event->getIf<sf::Event::MouseMoved>())
+
+            if (event->is<Event::KeyPressed>())
+                window.close();
+
+            // Mouse pressed — start drag
+            if (const auto* mb = event->getIf<Event::MouseButtonPressed>())
             {
-                float screenX = mouse->position.x;
-                float screenY = mouse->position.y;
-
-                float dx = screenX - originX;
-                float dy = screenY - originY;
-
-                float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
-                float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
-
-                int tileCol = (int)floor(col)-1;
-                int tileRow = (int)floor(row);
-
-                cout << "Clicked: " << tileRow << " , " << tileCol << std::endl;
-                if (tileRow >= 0 && tileRow < 10 && tileCol >= 0 && tileCol < 10)
+                if (mb->button == Mouse::Button::Left)
                 {
-                    cout << "Hovered: " << tileRow << " , " << tileCol << endl;
-                    grid[tileRow][tileCol].move({0, 2});
+                    // Convert screen pos back to image coords
+                    int imgX = (int)(mb->position.x / scaleX);
+                    int imgY = (int)(mb->position.y / scaleY);
+                    clickStart = {imgX, imgY};
+                    clickEnd   = {imgX, imgY};
+                    dragging = true;
+
+                    // Single click info
+                    Color px = image.getPixel({(unsigned)imgX, (unsigned)imgY});
+                    lastInfo =  "Pixel: (" + to_string(imgX) + ", " + to_string(imgY) + ")\n"
+                                "RGBA: (" + to_string(px.r) + ", " + to_string(px.g) + ", "
+                                          + to_string(px.b) + ", " + to_string(px.a) + ")\n"
+                                "Drag to select a rect region.";
+                    cout << "\n[CLICK] Pixel: (" << imgX << ", " << imgY << ")"
+                         << "  RGBA: (" << (int)px.r << ", " << (int)px.g << ", "
+                         << (int)px.b << ", " << (int)px.a << ")\n";
+                }
+            }
+
+            // Mouse released — finalize rect
+            if (const auto* mb = event->getIf<Event::MouseButtonReleased>())
+            {
+                if (mb->button == Mouse::Button::Left && dragging)
+                {
+                    int imgX = (int)(mb->position.x / scaleX);
+                    int imgY = (int)(mb->position.y / scaleY);
+                    clickEnd = {imgX, imgY};
+                    dragging = false;
+
+                    int rx = min(clickStart.x, clickEnd.x);
+                    int ry = min(clickStart.y, clickEnd.y);
+                    int rw = abs(clickEnd.x - clickStart.x);
+                    int rh = abs(clickEnd.y - clickStart.y);
+
+                    lastInfo =  "IntRect: ({" + to_string(rx) + ", " + to_string(ry) + "}, {"
+                                             + to_string(rw) + ", " + to_string(rh) + "})\n"
+                                "Top-left: (" + to_string(rx) + ", " + to_string(ry) + ")\n"
+                                "Size: (" + to_string(rw) + " x " + to_string(rh) + ")";
+
+                    cout << "[RECT]  IntRect({"  << rx << ", " << ry << "}, {"
+                         << rw << ", " << rh << "})\n";
+                }
+            }
+
+            // Mouse moved — update drag rect
+            if (const auto* mm = event->getIf<Event::MouseMoved>())
+            {
+                if (dragging)
+                {
+                    int imgX = (int)(mm->position.x / scaleX);
+                    int imgY = (int)(mm->position.y / scaleY);
+                    clickEnd = {imgX, imgY};
+
+                    int rx = min(clickStart.x, clickEnd.x);
+                    int ry = min(clickStart.y, clickEnd.y);
+                    int rw = abs(clickEnd.x - clickStart.x);
+                    int rh = abs(clickEnd.y - clickStart.y);
+
+                    lastInfo =  "Dragging...\n"
+                                "IntRect: ({" + to_string(rx) + ", " + to_string(ry) + "}, {"
+                                             + to_string(rw) + ", " + to_string(rh) + "})";
                 }
             }
         }
-        window.clear(Color(29, 29, 29));
-        for (int i = 0; i < 10; i++)
+
+        // Update selection rect in screen space
+        if (clickStart.x >= 0 && clickEnd.x >= 0)
         {
-            for (int j = 0; j < 10; j++)
-            {
-                window.draw(grid[i][j]);
-            }
+            float sx = min(clickStart.x, clickEnd.x) * scaleX;
+            float sy = min(clickStart.y, clickEnd.y) * scaleY;
+            float sw = abs(clickEnd.x - clickStart.x) * scaleX;
+            float sh = abs(clickEnd.y - clickStart.y) * scaleY;
+            selection.setPosition({sx, sy});
+            selection.setSize({sw, sh});
         }
+
+        if (hasFont)
+            infoText.setString(lastInfo);
+
+        window.clear();
+        window.draw(sprite);
+        if (clickStart.x >= 0)
+            window.draw(selection);
+        if (hasFont)
+            window.draw(infoText);
         window.display();
     }
+
+    return 0;
 }

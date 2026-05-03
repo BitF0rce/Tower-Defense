@@ -3,6 +3,7 @@
 #include <SFML/Graphics.hpp>
 #include "../Screens/towerMenu.h"
 #include "../Utility-Classes/displayQueue.h"
+#include "Tower.h"
 using namespace std;
 using namespace sf;
 
@@ -166,24 +167,26 @@ public:
     }
 };
 
-void towerMenu(Plot* object);
-void hover(const Event& ev);
+void towerMenu(Plot *object);
+void hover(const Event &ev);
 class anchorPlot : public Plot
 {
     bool isOccupied = false;
     RectangleShape projection;
-    public:
+    Tower *towerPointer = nullptr;
+
+public:
     bool drawProjection = false;
+    friend void click(const Event &ev);
     anchorPlot()
     {
         onclick = towerMenu;
         plotBase.setTexture(&towerTexture);
         Vector2u size = towerHoverTexture.getSize();
         projection.setSize({200.f, 400.f});
-        projection.setTextureRect({{400, 0}, {700, (int)size.y-100}});
-        projection.setScale({0.2f,0.2f});
+        projection.setTextureRect({{400, 0}, {700, (int)size.y - 100}});
         projection.setTexture(&towerHoverTexture);
-        projection.setScale({0.3, 0.3f});
+        projection.setScale({0.2, 0.2f});
         projection.setOrigin({0, projection.getSize().y});
         anchorHover.addEvent(hover);
     }
@@ -192,21 +195,34 @@ class anchorPlot : public Plot
         window.draw(plotBase);
         if (drawProjection)
             window.draw(projection);
+        if (towerPointer != nullptr)
+            towerPointer->draw(window);
     }
     void startProjection()
     {
         drawProjection = true;
     }
-    void stopProject(){
+    void stopProject()
+    {
         drawProjection = false;
     }
-    void setPosition(Vector2f pos){
+    void setPosition(Vector2f pos)
+    {
         plotBase.setPosition(pos);
         projection.setPosition(pos);
-        cout<<"Projection : "<<projection.getPosition().x<<" , "<<projection.getPosition().y<<endl;
+        cout << "Projection : " << projection.getPosition().x << " , " << projection.getPosition().y << endl;
+    }
+    void buildTower(int a)
+    {
+        if (a == 0)
+        {
+            towerPointer = new ArcherTower(location[0], location[1]);
+            Vector2f pos = this->getPosition();
+            towerPointer->setPosition({pos.x + tileW / 2.f, pos.y}); // top tip of diamond
+            isOccupied = true;
+        }
     }
 };
-
 
 gridClickHandler handler;
 Plot *grid[rows][cols];
@@ -227,58 +243,69 @@ void click(const Event &ev)
         if (tower.getGlobalBounds().contains(mousePos))
         {
             cerr << "Arrow Tower Has been Selected...\n";
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
+            if (!plot->isOccupied)
+            {
+                plot->buildTower(0);
+            }
+            stopDrawing = true;
+            handler.resume();
+            towerMenuEvents.pause();
+            anchorHover.resume();
         }
     }
     else if (ev.getIf<Event::MouseMoved>())
     {
         Vector2f mousePos = Vector2f(ev.getIf<Event::MouseMoved>()->position);
-        float screenX = mousePos.x , screenY = mousePos.y;
+        float screenX = mousePos.x, screenY = mousePos.y;
         float dx = screenX - originX;
         float dy = screenY - originY;
 
         float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
         float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
 
-        int tileCol = (int)floor(col)-1;
+        int tileCol = (int)floor(col) - 1;
         int tileRow = (int)floor(row);
         if (tileRow == 24 && tileCol == 27)
         {
-            anchorPlot* plot = dynamic_cast<anchorPlot*>(grid[24][27]);
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
             plot->drawProjection = true;
         }
-        else{
-            anchorPlot* plot = dynamic_cast<anchorPlot*>(grid[24][27]);
+        else
+        {
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
             plot->drawProjection = false;
         }
     }
 }
 
-void hover(const Event& ev){
+void hover(const Event &ev)
+{
 
     if (ev.getIf<Event::MouseMoved>())
     {
         Vector2f mousePos = Vector2f(ev.getIf<Event::MouseMoved>()->position);
-        float screenX = mousePos.x , screenY = mousePos.y;
+        float screenX = mousePos.x, screenY = mousePos.y;
         float dx = screenX - originX;
         float dy = screenY - originY;
 
         float col = (dx / (tileW / 2.f) + dy / (tileH / 2.f)) / 2.f;
         float row = (dy / (tileH / 2.f) - dx / (tileW / 2.f)) / 2.f;
 
-        int tileCol = (int)floor(col)-1;
+        int tileCol = (int)floor(col) - 1;
         int tileRow = (int)floor(row);
-        if (tileRow == 24&& tileCol == 27 || tileRow==27 && tileCol== 23)
+        if (tileRow == 24 && tileCol == 27 || tileRow == 27 && tileCol == 23)
         {
             // cerr<<"HOVERING...";
-            anchorPlot* plot = dynamic_cast<anchorPlot*>(grid[tileRow][tileCol]);
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[tileRow][tileCol]);
             plot->drawProjection = true;
         }
-        else{
-            anchorPlot* plot = dynamic_cast<anchorPlot*>(grid[24][27]);
+        else
+        {
+            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[24][27]);
             plot->drawProjection = false;
-            plot = dynamic_cast<anchorPlot*>(grid[27][23]);
+            plot = dynamic_cast<anchorPlot *>(grid[27][23]);
             plot->drawProjection = false;
-
         }
     }
 }
@@ -294,7 +321,6 @@ void towerMenu(Plot *object)
     anchorHover.pause();
 }
 
-
 // Working Starts here.
 void loadGrid()
 {
@@ -308,7 +334,7 @@ void loadGrid()
             float screenX = originX + (j - i) * (tileW / 2);
             float screenY = originY + (j + i) * (tileH / 2);
 
-            if (i == 24&& j == 27 || i==27 && j== 23)
+            if (i == 24 && j == 27 || i == 27 && j == 23)
             {
                 grid[i][j] = new anchorPlot();
             }
