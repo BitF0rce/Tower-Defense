@@ -7,11 +7,14 @@
 #include"../Utility-Classes/displayQueue.h"
 #include "../Game-Classes/Plot.h"
 #include "../Game-Classes/Enemy.h"
+#include"main.h"
 using namespace std;
 using namespace sf;
 
 
 extern displayQueue queue;
+extern EventHandler mainMenuClicks;
+
 Font myFont("/home/shaaf/Desktop/Tower-Defense/Fonts/GameBox-Regular.ttf");
 RoundedRectangle progressContainer;
 RoundedRectangle progressBar;
@@ -115,13 +118,25 @@ float drawProgressBar(RenderWindow& win)
 bool drawLoadingScreen(RenderWindow& window){
     drawBottleNeck(window);
     float i = drawProgressBar(window);
-    if(i >= 0.05)
+    if(i >= 0)
     {
         window.clear();
-        loadGrid();
-        queue.pushBack(drawGrid);
-        queue.pushBack(drawEnemy);
+        // loadGrid();
+        // queue.pushBack(drawGrid);
+        // queue.pushBack(drawEnemy);
+        loadMenu();
+        queue.pushBack(displayMenu);
+        mainMenuClicks.addEvent(handleMainEvents);
+        mainMenuClicks.resume();
         return true;
     }
     else return false;
 }
+
+class ScreensManager{
+
+    public:
+    ScreensManager(){
+
+    }
+};

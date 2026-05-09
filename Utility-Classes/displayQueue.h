@@ -138,3 +138,156 @@ class EventHandler{
         delete[] funcArray;
     }
 };
+
+
+template <typename T,typename K>
+class TypedDisplayQueue {
+    typedef bool (*drawerFunction)(RenderWindow &window, T& obj);
+
+    struct Entry{
+        drawerFunction func;
+        T* obj;
+        K* target;
+        bool done = false;
+    };
+
+    Entry* queue = nullptr;
+    int length = 0;
+
+    void remove(int index) {
+        if (index < 0 || index >= length) return;
+        if (length == 1) {
+            delete[] queue;
+            queue = nullptr;
+            length = 0;
+            return;
+        }
+        Entry* temp = new Entry[length - 1];
+        int tempIdx = 0;
+        for (int i = 0; i < length; i++) {
+            if (i == index) continue;
+            temp[tempIdx++] = queue[i];
+        }
+        delete[] queue;
+        queue = temp;
+        length--;
+    }
+
+public:
+    void pushBack(drawerFunction func, T* obj , K* target) {
+        Entry* temp = new Entry[length + 1];
+        for (int i = 0; i < length; i++)
+            temp[i] = queue[i];
+        temp[length] = {func, obj, target};
+        delete[] queue;
+        queue = temp;
+        length++;
+    }
+
+    void runAll(RenderWindow &window) {
+        for (int i = 0; i < length; i++) {
+            if (queue[i].func(window, *queue[i].obj))
+                queue[i].done = true;
+        }
+        for (int i = 0; i < length; i++) {
+            if (queue[i].done) {
+                if(queue[i].obj->bulletBase.getGlobalBounds().findIntersection(queue[i].target->characterBase.getGlobalBounds())){
+                    if(queue[i].obj->type == "slowEffect"){
+                        queue[i].target->applyFreeze();
+                    }
+                    queue[i].target->collide(queue[i].obj->damageDelt);
+                }
+                queue[i].obj->bulletBase.setSize({0, 0});
+                queue[i].obj->bulletBase.setPosition({0, 0});
+                remove(i);
+                i--;
+            }
+        }
+    }
+
+    ~TypedDisplayQueue() {
+        delete[] queue;
+    }
+};
+
+
+template<typename Tow>
+class TowerManager{
+    Tow** stack = nullptr;
+    int count=0;
+    public:
+    void pushBack(Tow* input){
+        Tow** temp = new Tow*[count+1];
+        for(int i=0;i<count;i++){
+            temp[i] = stack[i];
+        }
+        temp[count] = input;
+        delete[] stack;
+        stack = temp;
+        count++;
+    }
+    void handleEvents(Event& ev){
+        for(int i=0;i<count;i++){
+            stack[i]->handleEvents(ev);
+        }
+    }
+};
+
+struct CircularButton{
+    CircleShape base;
+    CircleShape visual;
+    Vector2f position;
+    bool hovering;
+    Clock moveClock;
+    float rad;
+};
+
+
+void checkMove(RectangleShape& testBox ,const Event& ev)
+{
+        if (const auto click = ev.getIf<Event::MouseButtonPressed>())
+        {
+            Vector2f pos = {
+                (float)click->position.x,
+                (float)click->position.y};
+
+            testBox.setPosition(pos);
+        }
+
+        else if (const auto key = ev.getIf<Event::KeyPressed>())
+        {
+            if (key->code == Keyboard::Key::Left)
+            {
+                testBox.setSize({testBox.getSize().x - 1.f,
+                                 testBox.getSize().y});
+            }
+            else if (key->code == Keyboard::Key::Right)
+            {
+                testBox.setSize({testBox.getSize().x + 1.f,
+                                 testBox.getSize().y});
+            }
+            else if (key->code == Keyboard::Key::Up)
+            {
+                testBox.setSize({testBox.getSize().x,
+                                 testBox.getSize().y - 1.f});
+            }
+            else if (key->code == Keyboard::Key::Down)
+            {
+                testBox.setSize({testBox.getSize().x,
+                                 testBox.getSize().y + 1.f});
+            }
+
+            // 3. Print size + position on O press
+            else if (key->code == Keyboard::Key::O)
+            {
+                Vector2f pos = testBox.getPosition();
+                Vector2f size = testBox.getSize();
+
+                std::cout << "Position: ("
+                          << pos.x << ", " << pos.y << ")\n";
+
+                std::cout << "Size: ("
+                          << size.x << ", " << size.y << ")\n";
+            }
+        }
+}

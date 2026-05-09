@@ -4,17 +4,24 @@
 #include "../Screens/towerMenu.h"
 #include "../Utility-Classes/displayQueue.h"
 #include "Tower.h"
+#include <fstream>
+#include <string>
 using namespace std;
 using namespace sf;
+
+bool gameOver= false;
 
 extern displayQueue queue;
 extern EventHandler towerMenuEvents;
 extern EventHandler anchorHover;
 
+void onSpawnButtonClick();
+bool waitingForSpawn = true; // Backward declaration for enemy.h
 Texture Path("./Assets/isometric/separated-images/tile_114.png");
 Texture Path2("./Assets/isometric/separated-images/tile_009.png");
 Texture towerTexture("./Assets/isometric/separated-images/tile_063.png");
 Texture towerHoverTexture("./Assets/outlineTexture.png");
+Texture tileSheet("./Assets/isometric/spritesheet.png");
 
 int getDirection(float screenX, float screenY);
 class Plot;
@@ -26,13 +33,13 @@ float tileW = 50,
       originY = -300.0f; // Grid Height = (41 + 41) * (32 / 2) = 80 * 16 = 1280px. Screen Height = 700. diff = 580. diff/2 = 290.
 const int rows = 52,
           cols = 52;
-Texture grassTexture("./Assets/grass.png");
+
 void placeHolderFunction(Plot *object)
 {
     // DOES NOTHING
 }
 
-pair<int,int> screenToTile(float screenX, float screenY)
+pair<int, int> screenToTile(float screenX, float screenY)
 {
     float dx = screenX - (originX + tileW / 2.f);
     float dy = screenY - originY;
@@ -68,7 +75,7 @@ pair<int,int> screenToTile(float screenX, float screenY)
         }
     }
 
-    return { bestRow, bestCol };
+    return {bestRow, bestCol};
 }
 
 class Plot
@@ -126,8 +133,8 @@ public:
     {
         return plotBase.getPosition();
     }
-    int getRow(){return location[0];}
-    int getCol(){return location[1];}
+    int getRow() { return location[0]; }
+    int getCol() { return location[1]; }
 };
 
 class simplePlot : public Plot
@@ -135,7 +142,7 @@ class simplePlot : public Plot
 public:
     simplePlot()
     {
-        plotBase.setTexture(&Path);
+        plotBase.setTexture(&tileSheet);
     }
     void draw(RenderWindow &window)
     {
@@ -148,7 +155,7 @@ class pathPlot : public Plot
 public:
     pathPlot()
     {
-        plotBase.setTexture(&Path2);
+        plotBase.setTexture(&tileSheet);
         plotBase.move({0.0f, 7.0f});
     }
     void draw(RenderWindow &window)
@@ -207,21 +214,22 @@ public:
         }
     }
 };
+
 class EnemyManager
 {
     int **info = nullptr;
-    Tower** towersArray;
+    Tower **towersArray;
     int count = 0;
 
 public:
-    void pushBack(Vector2i loc, int radius,Tower* ptr)
+    void pushBack(Vector2i loc, int radius, Tower *ptr)
     {
         int **temp = new int *[count + 1];
         for (int i = 0; i < count; i++)
         {
             temp[i] = new int[3];
             for (int j = 0; j < 3; j++)
-            temp[i][j] = info[i][j];
+                temp[i][j] = info[i][j];
         }
         temp[count] = new int[3];
         temp[count][0] = loc.x;
@@ -233,16 +241,17 @@ public:
         }
         delete[] info;
         info = temp;
-        Tower** tempT = new Tower*[count];
-        for(int i=0;i<count;i++){
-            tempT[i]= towersArray[i];
+        Tower **tempT = new Tower *[count];
+        for (int i = 0; i < count; i++)
+        {
+            tempT[i] = towersArray[i];
         }
         tempT[count] = ptr;
         delete[] towersArray;
         towersArray = tempT;
         count++;
     }
-    void poll(Vector2i loc, Vector2f pos, float speed)
+    void poll(Enemy *target, Vector2i loc, Vector2f pos, Vector2f velocity)
     {
         int cRow = loc.x, cCol = loc.y;
         for (int i = 0; i < count; i++)
@@ -251,7 +260,7 @@ public:
             {
                 if (cCol <= info[i][1] + info[i][2] && cCol >= info[i][1] - info[i][2])
                 {
-                    towersArray[i]->attack(pos, speed);
+                    towersArray[i]->attack(target, pos, velocity);
                 }
             }
         }
@@ -271,10 +280,11 @@ class anchorPlot : public Plot
 public:
     bool drawProjection = false;
     friend void click(const Event &ev);
+    friend void towerMenu(Plot *object);
     anchorPlot()
     {
         onclick = towerMenu;
-        plotBase.setTexture(&towerTexture);
+        plotBase.setTexture(&tileSheet);
         Vector2u size = towerHoverTexture.getSize();
         projection.setSize({200.f, 400.f});
         projection.setTextureRect({{400, 0}, {700, (int)size.y - 100}});
@@ -301,30 +311,41 @@ public:
     void setPosition(Vector2f pos)
     {
         plotBase.setPosition(pos);
-        projection.setPosition({pos.x , pos.y + tileH*1.5f});
+        projection.setPosition({pos.x, pos.y + tileH * 1.5f});
         cout << "Projection : " << projection.getPosition().x << " , " << projection.getPosition().y << endl;
     }
     void buildTower(int a)
     {
         if (a == 0)
         {
-            towerPointer = new IceTower(location[0], location[1]);
-            Vector2f pos = this->getPosition();
-            towerPointer->setPosition({pos.x + tileW / 2.f, pos.y + tileH*1.5f});
-            masterManager.pushBack({location[0] , location[1]}, towerPointer->getRadius(), towerPointer);
-            isOccupied = true;
+            towerPointer = new SniperTower(location[0], location[1]);
         }
+        else if (a == 1)
+            towerPointer = new MachineGunTower(location[0], location[1]);
+        else if (a == 2)
+            towerPointer = new CannonTower(location[0], location[1]);
+        else if (a == 3)
+            towerPointer = new SlowTower(location[0], location[1]);
+        else if (a == 4)
+            towerPointer = new CannonTower(location[0], location[1]);
+        Vector2f pos = this->getPosition();
+        towerPointer->setPosition({pos.x + tileW / 2.f, pos.y + tileH * 1.5f});
+        masterManager.pushBack({location[0], location[1]}, towerPointer->getRadius(), towerPointer);
+        isOccupied = true;
     }
-    bool occupationStatus(){
+    bool occupationStatus()
+    {
         return isOccupied;
     }
-    void invokeTower(Vector2f enemyPos, float enemySpeed){
-        cout<<"Tower Invoked..........\n";
+    void invokeTower(Vector2f enemyPos, float enemySpeed)
+    {
+        cout << "Tower Invoked..........\n";
     }
-    int getRadius(){
-        cerr<<"Inside Plot...";
+    int getRadius()
+    {
+        cerr << "Inside Plot...";
 
-        return  towerPointer->getRadius();
+        return towerPointer->getRadius();
     }
 };
 
@@ -335,7 +356,6 @@ void click(const Event &ev)
 {
     if (ev.getIf<Event::KeyPressed>())
     {
-        cerr << "Menu OVER\n";
         stopDrawing = true;
         handler.resume();
         towerMenuEvents.pause();
@@ -344,14 +364,32 @@ void click(const Event &ev)
     else if (ev.getIf<Event::MouseButtonPressed>())
     {
         Vector2f mousePos = Vector2f(ev.getIf<Event::MouseButtonPressed>()->position);
-        if (tower.getGlobalBounds().contains(mousePos))
+        bool Proceed = false;
+        int selection;
+        for (int i = 0; i < 5; i++)
+        {
+            if (tower[i].getGlobalBounds().contains(mousePos))
+            {
+                Proceed = true;
+                selection = i;
+            }
+        }
+        if (Proceed)
         {
             cerr << "Arrow Tower Has been Selected...\n";
             anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[openAnchorRow][openAnchorCol]);
             if (!plot->isOccupied)
             {
-                plot->buildTower(0);
-
+                if (selection == 0)
+                    plot->buildTower(0);
+                else if (selection == 1)
+                    plot->buildTower(1);
+                else if (selection == 2)
+                    plot->buildTower(2);
+                else if (selection == 3)
+                    plot->buildTower(3);
+                else if (selection == 4)
+                    plot->buildTower(4);
             }
             stopDrawing = true;
             handler.resume();
@@ -387,8 +425,15 @@ void hover(const Event &ev)
         }
     }
 }
+
+
 void towerMenu(Plot *object)
 {
+    anchorPlot *ptr = dynamic_cast<anchorPlot *>(object);
+    if (ptr->isOccupied || waitingForSpawn == false)
+    {
+        return;
+    }
     stopDrawing = false;
     openAnchorRow = object->getRow();
     openAnchorCol = object->getCol();
@@ -400,39 +445,164 @@ void towerMenu(Plot *object)
 }
 
 // Working Starts here.
+
+Texture callEnemy("./Assets/callEnemy.png");
+CircleShape spawnButton;
+extern EventHandler inGameEvents;
+RectangleShape infoScroll;
+Texture scrollTexture("./Assets/infoScroll.png");
+Font infoFont("./Fonts/BlockCraft.otf");
+Text waveInfo(infoFont);
+Text healthText(infoFont);
+RectangleShape hearts[5];
+Texture heartsTexture("./Assets/hearts.png");
+
+RectangleShape gameOverScroll;
+Text gameOverText(infoFont);
+
+
+void respondSpawnRequest(const Event &ev)
+{
+
+    checkMove(gameOverScroll, ev);
+    if (auto clicked = ev.getIf<Event::MouseButtonPressed>())
+    {
+        Vector2f pos = {(float)(clicked->position).x, (float)(clicked->position.y)};
+        if (spawnButton.getGlobalBounds().contains(pos))
+        {
+            if (waitingForSpawn)
+                onSpawnButtonClick();
+        }
+    }
+    else if (auto clicked = ev.getIf<Event::MouseMoved>())
+    {
+    }
+}
 void loadGrid()
 {
-    for (int i = 0; i < rows; i++)
-    {
+    spawnButton.setRadius(30.f);
+    spawnButton.setTexture(&callEnemy);
+    spawnButton.setTextureRect({{238, 60}, {232, 238}});
+    spawnButton.setFillColor(Color::Black);
+    inGameEvents.addEvent(respondSpawnRequest);
 
+    infoScroll.setTexture(&scrollTexture);
+    infoScroll.setTextureRect({{32, 27}, {589 , 332}});
+    infoScroll.setSize({296, 142});
+    infoScroll.setPosition({890, 550});
+
+    waveInfo.setString("Wave : 0/5");
+    waveInfo.setPosition({930 , 570});
+    waveInfo.setFillColor(Color::Black);
+    waveInfo.setCharacterSize(30);
+
+    healthText.setString("Health : ");
+    healthText.setPosition({930, 600});
+    healthText.setCharacterSize(27);
+    healthText.setFillColor(Color::Black);
+
+    gameOverScroll.setTextureRect({{32, 27}, {589 , 332}});
+    gameOverScroll.setSize({100, 100});
+    gameOverScroll.setTexture(&scrollTexture);
+
+
+    for(int i=0;i<5;i++){
+        hearts[i].setTextureRect({{21,26} , {294,290}});
+        hearts[i].setSize({294, 290});
+        hearts[i].setScale({20.f/294.f , 20.f / 290.f});
+        hearts[i].setTexture(&heartsTexture);
+        hearts[i].setPosition({(float)(1040+(i*23)) , 610});
+        // hearts[i].setOutlineColor(Color::Black);
+        // hearts[i].setOutlineThickness(2);
+    }
+    int layoutTex[rows][cols], layoutElev[rows][cols], layoutDir[rows][cols];
+    for (int i = 0; i < rows; i++)
         for (int j = 0; j < cols; j++)
         {
-            bool isAnchor;
+            layoutTex[i][j] = -1; // this indicates no texture set.
+            layoutElev[i][j] = 0; // default elevation
+            layoutDir[i][j] = 0;  // also default
+        }
 
+    ifstream inputFile("./layout.txt");
+    if (!inputFile.is_open())
+        cerr << "Failed to load layout.txt — using defaults\n";
+    else
+    {
+        string line;
+        int i = 0;
+        while (i < rows && getline(inputFile, line))
+        {
+            if (line.empty() || line[0] == '#')
+                continue;
+            istringstream ss(line);
+            for (int j = 0; j < cols; j++) // expects the file to strictly have 53 entries per row.
+                ss >> layoutTex[i][j];
+            i++;
+        }
+        // elevation map
+        int e = 0;
+        while (e < rows && getline(inputFile, line))
+        {
+            if (line.empty() || line[0] == '#')
+                continue;
+            istringstream ss(line);
+            for (int j = 0; j < cols; j++)
+                ss >> layoutElev[e][j];
+            e++;
+        }
+        // direction map
+        int d = 0;
+        while (d < rows && getline(inputFile, line))
+        {
+            if (line.empty() || line[0] == '#')
+                continue;
+            istringstream ss(line);
+            for (int j = 0; j < cols; j++)
+                ss >> layoutDir[d][j];
+            d++;
+        }
+        cerr << "Layout loaded.\n";
+    }
+
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {
             float screenX = originX + (j - i) * (tileW / 2);
             float screenY = originY + (j + i) * (tileH / 2);
 
-            if (i == 19 && j == 14 || i == 22 && j == 23 || i==12 && j== 24)
+            int dir = layoutDir[i][j];
+            int tex = layoutTex[i][j];
+
+            bool isAnchor = false;
+            if (dir > 0)
+                grid[i][j] = new pathPlot();
+            else if (i == 19 && j == 14 || i == 22 && j == 23 || i == 12 && j == 24)
             {
                 grid[i][j] = new anchorPlot();
-            }
-            else if (i == 20 || i == 21 || j == 21 || j == 22)
-            {
-                grid[i][j] = new pathPlot();
-                if(j==21 || j==22){
-                    grid[i][j]->direction = 2;
-                }
-                else{
-                    grid[i][j]->direction = 1;
-                }
+                isAnchor = true;
             }
             else
-            {
                 grid[i][j] = new simplePlot();
-            }
-            handler.addBlock((grid[i][j]));
+
+            handler.addBlock(grid[i][j]);
+
+            screenY -= layoutElev[i][j];
             grid[i][j]->setPosition({screenX, screenY});
-            grid[i][j]->setTextureRect(IntRect({0, 0}, {32, 32}));
+
+            // texture
+            if (isAnchor)
+            {
+                grid[i][j]->setTextureRect(IntRect({0, 0}, {32, 32}));
+            }
+            else if (tex >= 0)
+                grid[i][j]->setTextureRect(IntRect({(tex % 11) * 32, (tex / 11) * 32}, {32, 32}));
+            else
+                grid[i][j]->setTextureRect(IntRect({0, 0}, {32, 32}));
+
+            // direction
+            grid[i][j]->setDirection(dir);
             grid[i][j]->location[0] = i;
             grid[i][j]->location[1] = j;
         }
@@ -458,5 +628,11 @@ bool drawGrid(RenderWindow &window)
             grid[i][j]->draw(window);
         }
     }
+    window.draw(spawnButton);
+    window.draw(infoScroll);
+    window.draw(waveInfo);
+    window.draw(healthText);
+    for(int i=0;i<5;i++)
+    window.draw(hearts[i]);
     return false;
 }

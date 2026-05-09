@@ -6,39 +6,44 @@ using namespace sf;
 using namespace std;
 
 bool stopDrawing = true;
-float r1 = 70, r2 = 110;
+float r1 = 70, r2 = 120;
 CircleShape inner(r1);
 CircleShape outer(r2);
-RectangleShape tower;
-Texture towerText("/home/shaaf/Desktop/Tower-Defense/Assets/arrow.png");
+RectangleShape tower[5];
+Texture towerText("/home/shaaf/Desktop/Tower-Defense/Assets/TowerMenuIcons.png");
 
 void initiateTowerMenu(Vector2f pos){
     inner.setFillColor(Color(0,0,0,170));
     outer.setFillColor(Color(0,20,25,100));
     inner.setPosition(pos);
     outer.setPosition(pos);
-    inner.setOrigin({r1 , r1});
-    outer.setOrigin({r2 , r2});
+    inner.setOrigin({r1, r1});
+    outer.setOrigin({r2, r2});
 
-        tower.setSize({70.f , 70.f});
-        // towers[i].setTextureRect({{30 , 30} , {140 , 150}});
-        tower.setScale({0.6f,0.6f});
-        tower.setTexture(&towerText);
+    float angleStep = 360.f / 5.f;
+    float PI = 3.14159f;
+    float radialDistance = (r1 + r2) / 2.f;
 
-    tower.setPosition({inner.getPosition().x , inner.getPosition().y-r2});
+    for(int i = 0; i < 5; i++){
+        tower[i].setTextureRect({{17+(i*133),109},{133,135}});
+        tower[i].setSize({70.f, 70.f});
+        tower[i].setOrigin({35.f, 35.f});
+        tower[i].setScale({0.6f, 0.6f});
+        tower[i].setTexture(&towerText);
+        
+        float angle = (i * angleStep - 90.f) * (PI / 180.f);
+        float itemX = pos.x + radialDistance * cos(angle);
+        float itemY = pos.y + radialDistance * sin(angle);
+
+        tower[i].setPosition({itemX, itemY});
+        // tower[i].setOutlineColor(Color::Green);
+        // tower[i].setOutlineThickness(3);
+    }
 }
-
 bool drawTowerMenu(RenderWindow& window){
     window.draw(outer);
     window.draw(inner);
-    window.draw(tower);
+    for(int i=0;i<5;i++)
+    window.draw(tower[i]);
     return stopDrawing;
 }
-
-// Is the tower spot occupied.
-// Show the respectively selected tower.
-// Make Tower Class along with it's Attack Radius detection and Attack mechanism
-// Add Health Dynamics to the Enemy Class which are affected by attack.
-// Improve Waypoints
-// An Enemy must always be animated-> Make Animation Queue which holds All Enemies' Animation states. 
-// 
