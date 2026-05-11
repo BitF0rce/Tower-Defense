@@ -11,6 +11,7 @@ class Bullet;
 class Enemy;
 class Tower;
 extern TowerManager<Tower> allTowers;
+extern int towerLevels[5];
 
 bool drawBullet(RenderWindow &window, Bullet &obj);
 extern displayQueue queue;
@@ -120,7 +121,9 @@ bool drawBullet(RenderWindow &window, Bullet &obj)
             return true;
         }
     }
-    window.draw(obj.bulletBase);
+    if(obj.type != "slowEffect"){
+        window.draw(obj.bulletBase);
+    }
     return false;
 }
 
@@ -138,12 +141,12 @@ protected:
     Clock attackTimer;
     float hitDelay, bulletSpeed = 6.0f;
     string shootType="normal";
-    float damageInduced = 10.f;// Standard
-    
+    float damageInduced = 10.f;
+    int eventManagerIndex;
 public:
     Tower(int a, int b)
     {
-        allTowers.pushBack(this);
+        eventManagerIndex = allTowers.pushBack(this);
         towerBase.setSize({200.f, 400.f});
         towerBase.setOrigin({0.f, 400.0f});
         type = "undef";
@@ -208,6 +211,78 @@ public:
 };
 
 
+class SniperTower : public Tower{
+    public:
+    SniperTower(int a, int b) : Tower(a, b)
+    {
+        attackRadius = 20;
+        hitDelay = 1000;
+        bulletSpeed = 10.0f;
+        towerBase.setSize({123.f, 159.f});
+        towerBase.setOrigin({61.f, 158.f});
+        towerBase.setTexture(&archer);
+        towerBase.setTextureRect({{14, 14}, {126, 151}});
+        towerBase.setScale({0.4f, 0.4f});
+        damageInduced = 35.f;
+    }
+    int getRadius() override{
+        switch (towerLevels[0])
+        {
+        case 1:
+            return 15;
+            break;
+        case 2:
+            return 18;
+            break;
+        case 3:
+            return 20;
+        case 4:
+            return 23;
+        case 5:
+            return 25;
+        default:
+            return 20;
+        }
+    }
+};
+
+
+
+class MachineGunTower : public Tower
+{
+public:
+    MachineGunTower(int a, int b) : Tower(a, b)
+    {
+        attackRadius = 9;
+        hitDelay = 15;
+        towerBase.setSize({123.f, 159.f});
+        towerBase.setOrigin({61.f, 158.f});
+        towerBase.setTexture(&archer);
+        towerBase.setTextureRect({{17, 191}, {123, 159}});
+        towerBase.setScale({0.4f, 0.4f});
+        damageInduced = 20.f;
+    }
+    int getRadius() override{
+        switch (towerLevels[1])
+        {
+        case 1:
+            return 9;
+            break;
+        case 2:
+            return 12;
+            break;
+        case 3:
+            return 14;
+        case 4:
+            return 16;
+        case 5:
+            return 18;
+        default:
+            return 20;
+        }
+    }
+};
+
 class CannonTower: public Tower
 {
 public:
@@ -222,37 +297,24 @@ public:
         towerBase.setScale({0.4f, 0.4f});
         damageInduced = 75;
     }
-};
-
-class MachineGunTower : public Tower
-{
-public:
-    MachineGunTower(int a, int b) : Tower(a, b)
-    {
-        attackRadius = 10;
-        hitDelay = 15;
-        towerBase.setSize({123.f, 159.f});
-        towerBase.setOrigin({61.f, 158.f});
-        towerBase.setTexture(&archer);
-        towerBase.setTextureRect({{17, 191}, {123, 159}});
-        towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 5.f;
-    }
-};
-
-class SniperTower : public Tower{
-    public:
-    SniperTower(int a, int b) : Tower(a, b)
-    {
-        attackRadius = 20;
-        hitDelay = 1000;
-        bulletSpeed = 10.0f;
-        towerBase.setSize({123.f, 159.f});
-        towerBase.setOrigin({61.f, 158.f});
-        towerBase.setTexture(&archer);
-        towerBase.setTextureRect({{14, 14}, {126, 151}});
-        towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 20.f;
+    int getRadius() override{
+        switch (towerLevels[2])
+        {
+        case 1:
+            return 15;
+            break;
+        case 2:
+            return 20;
+            break;
+        case 3:
+            return 22;
+        case 4:
+            return 24;
+        case 5:
+            return 26;
+        default:
+            return 28;
+        }
     }
 };
 
@@ -261,8 +323,8 @@ class SlowTower : public Tower{
     public:
     SlowTower(int a, int b) : Tower(a, b)
     {
-        attackRadius = 20;
-        hitDelay = 200;
+        attackRadius = 15;
+        hitDelay = 0;
         bulletSpeed = 20.0f;
         shootType= "slowEffect";
         towerBase.setSize({123.f, 159.f});
@@ -270,7 +332,26 @@ class SlowTower : public Tower{
         towerBase.setTexture(&archer);
         towerBase.setTextureRect({{280, 10}, {122, 156}});
         towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 1.f;
+        damageInduced = 3.f;
+    }
+    int getRadius() override{
+        switch (towerLevels[3])
+        {
+        case 1:
+            return 15;
+            break;
+        case 2:
+            return 18;
+            break;
+        case 3:
+            return 20;
+        case 4:
+            return 22;
+        case 5:
+            return 24;
+        default:
+            return 20;
+        }
     }
 };
 // AnchroPlot holds Tower*

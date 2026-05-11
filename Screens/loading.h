@@ -132,11 +132,3 @@ bool drawLoadingScreen(RenderWindow& window){
     }
     else return false;
 }
-
-class ScreensManager{
-
-    public:
-    ScreensManager(){
-
-    }
-};

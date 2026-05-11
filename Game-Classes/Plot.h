@@ -9,14 +9,24 @@
 using namespace std;
 using namespace sf;
 
-bool gameOver= false;
 
+
+bool gameOver = false;
+int currentLevelIndex = 0;
 extern displayQueue queue;
 extern EventHandler towerMenuEvents;
 extern EventHandler anchorHover;
+extern EventHandler overlayPromptEvents;
+extern int activeLevel;
 
 void onSpawnButtonClick();
 bool waitingForSpawn = true; // Backward declaration for enemy.h
+void loadPoints();
+void handleOverlayClick(const Event &ev);
+// Backward declaration to make it work in main.h as it is now included by Enemy.h
+void loadLevel(int level);
+bool drawLevel(RenderWindow &window);
+
 Texture Path("./Assets/isometric/separated-images/tile_114.png");
 Texture Path2("./Assets/isometric/separated-images/tile_009.png");
 Texture towerTexture("./Assets/isometric/separated-images/tile_063.png");
@@ -123,7 +133,7 @@ public:
     {
         window.draw(plotBase);
     }
-    friend void loadGrid();
+    friend void loadGrid(int level);
     friend class gridClickHandler;
     void addClickReaction(void (*tFunc)(Plot *object))
     {
@@ -213,57 +223,83 @@ public:
             }
         }
     }
+    ~gridClickHandler()
+    {
+        delete[] ptr;
+        ptr = nullptr;
+    }
 };
 
 class EnemyManager
 {
-    int **info = nullptr;
-    Tower **towersArray;
+    struct TowerInfo
+    {
+        int row, col;
+        Tower *tower;
+    };
+    TowerInfo *info = nullptr;
     int count = 0;
 
 public:
     void pushBack(Vector2i loc, int radius, Tower *ptr)
     {
-        int **temp = new int *[count + 1];
+        TowerInfo *temp = new TowerInfo[count + 1];
         for (int i = 0; i < count; i++)
         {
-            temp[i] = new int[3];
-            for (int j = 0; j < 3; j++)
-                temp[i][j] = info[i][j];
+            temp[i] = info[i];
         }
-        temp[count] = new int[3];
-        temp[count][0] = loc.x;
-        temp[count][1] = loc.y;
-        temp[count][2] = radius;
-        for (int i = 0; i < count; i++)
-        {
-            delete[] info[i];
-        }
+        temp[count] = {loc.x, loc.y, ptr};
         delete[] info;
         info = temp;
-        Tower **tempT = new Tower *[count];
-        for (int i = 0; i < count; i++)
-        {
-            tempT[i] = towersArray[i];
-        }
-        tempT[count] = ptr;
-        delete[] towersArray;
-        towersArray = tempT;
         count++;
     }
+
     void poll(Enemy *target, Vector2i loc, Vector2f pos, Vector2f velocity)
     {
         int cRow = loc.x, cCol = loc.y;
         for (int i = 0; i < count; i++)
         {
-            if (cRow <= info[i][0] + info[i][2] && cRow >= info[i][0] - info[i][2])
+            if (info[i].tower == nullptr)
+                continue;
+
+            int radius = info[i].tower->getRadius();
+            if (abs(cRow - info[i].row) <= radius &&
+                abs(cCol - info[i].col) <= radius)
             {
-                if (cCol <= info[i][1] + info[i][2] && cCol >= info[i][1] - info[i][2])
-                {
-                    towersArray[i]->attack(target, pos, velocity);
-                }
+                info[i].tower->attack(target, pos, velocity);
             }
         }
+    }
+
+    void removeTower(Tower *towerToRemove)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            if (info[i].tower == towerToRemove)
+            {
+                info[i].tower = nullptr;
+                break;
+            }
+        }
+    }
+
+    void clearAll()
+    {
+        for (int i = 0; i < count; i++)
+        {
+            info[i].tower = nullptr;
+        }
+    }
+    void reset()
+    {
+        delete[] info;
+        info = nullptr;
+        count = 0;
+    }
+
+    ~EnemyManager()
+    {
+        reset();
     }
 };
 
@@ -312,7 +348,7 @@ public:
     {
         plotBase.setPosition(pos);
         projection.setPosition({pos.x, pos.y + tileH * 1.5f});
-        cout << "Projection : " << projection.getPosition().x << " , " << projection.getPosition().y << endl;
+        // cout << "Projection : " << projection.getPosition().x << " , " << projection.getPosition().y << endl;
     }
     void buildTower(int a)
     {
@@ -332,6 +368,16 @@ public:
         towerPointer->setPosition({pos.x + tileW / 2.f, pos.y + tileH * 1.5f});
         masterManager.pushBack({location[0], location[1]}, towerPointer->getRadius(), towerPointer);
         isOccupied = true;
+    }
+    void destroyTower()
+    {
+        if (towerPointer != nullptr)
+        {
+            masterManager.removeTower(towerPointer);
+            delete towerPointer;
+            towerPointer = nullptr;
+            isOccupied = false;
+        }
     }
     bool occupationStatus()
     {
@@ -426,7 +472,6 @@ void hover(const Event &ev)
     }
 }
 
-
 void towerMenu(Plot *object)
 {
     anchorPlot *ptr = dynamic_cast<anchorPlot *>(object);
@@ -460,7 +505,6 @@ Texture heartsTexture("./Assets/hearts.png");
 RectangleShape gameOverScroll;
 Text gameOverText(infoFont);
 
-
 void respondSpawnRequest(const Event &ev)
 {
 
@@ -478,21 +522,31 @@ void respondSpawnRequest(const Event &ev)
     {
     }
 }
-void loadGrid()
+
+void loadGrid(int level = 1)
 {
+    if (level < 1)
+        level = 1;
+    if (level > 3)
+        level = 3;
+    activeLevel = level - 1;
+
+    loadPoints();
+
     spawnButton.setRadius(30.f);
     spawnButton.setTexture(&callEnemy);
     spawnButton.setTextureRect({{238, 60}, {232, 238}});
-    spawnButton.setFillColor(Color::Black);
+    spawnButton.setFillColor(Color::White);
     inGameEvents.addEvent(respondSpawnRequest);
+    overlayPromptEvents.addEvent(handleOverlayClick);
 
     infoScroll.setTexture(&scrollTexture);
-    infoScroll.setTextureRect({{32, 27}, {589 , 332}});
+    infoScroll.setTextureRect({{32, 27}, {589, 332}});
     infoScroll.setSize({296, 142});
     infoScroll.setPosition({890, 550});
 
     waveInfo.setString("Wave : 0/5");
-    waveInfo.setPosition({930 , 570});
+    waveInfo.setPosition({930, 570});
     waveInfo.setFillColor(Color::Black);
     waveInfo.setCharacterSize(30);
 
@@ -501,42 +555,57 @@ void loadGrid()
     healthText.setCharacterSize(27);
     healthText.setFillColor(Color::Black);
 
-    gameOverScroll.setTextureRect({{32, 27}, {589 , 332}});
-    gameOverScroll.setSize({100, 100});
-    gameOverScroll.setTexture(&scrollTexture);
-
-
-    for(int i=0;i<5;i++){
-        hearts[i].setTextureRect({{21,26} , {294,290}});
+    for (int i = 0; i < 5; i++)
+    {
+        hearts[i].setTextureRect({{21, 26}, {294, 290}});
         hearts[i].setSize({294, 290});
-        hearts[i].setScale({20.f/294.f , 20.f / 290.f});
+        hearts[i].setScale({20.f / 294.f, 20.f / 290.f});
         hearts[i].setTexture(&heartsTexture);
-        hearts[i].setPosition({(float)(1040+(i*23)) , 610});
-        // hearts[i].setOutlineColor(Color::Black);
-        // hearts[i].setOutlineThickness(2);
+        hearts[i].setPosition({(float)(1040 + (i * 23)), 610});
     }
-    int layoutTex[rows][cols], layoutElev[rows][cols], layoutDir[rows][cols];
+
+    string layoutFile;
+    if (activeLevel == 0)
+    {
+        layoutFile = "./Data-Files/layout1.txt";
+    }
+    else if (activeLevel == 1)
+    {
+        layoutFile = "./Data-Files/layout2.txt";
+    }
+    else if (activeLevel == 2)
+    {
+        layoutFile = "./Data-Files/layout3.txt";
+    }
+
+    int layoutTex[rows][cols];
+    int layoutElev[rows][cols];
+    int layoutDir[rows][cols];
     for (int i = 0; i < rows; i++)
         for (int j = 0; j < cols; j++)
         {
-            layoutTex[i][j] = -1; // this indicates no texture set.
-            layoutElev[i][j] = 0; // default elevation
-            layoutDir[i][j] = 0;  // also default
+            layoutTex[i][j] = -1;
+            layoutElev[i][j] = 0;
+            layoutDir[i][j] = 0;
         }
 
-    ifstream inputFile("./layout.txt");
+    ifstream inputFile(layoutFile);
     if (!inputFile.is_open())
-        cerr << "Failed to load layout.txt — using defaults\n";
-    else
+    {
+        cerr << "Failed to load " << layoutFile;
+    }
+
+    if (inputFile.is_open())
     {
         string line;
+        // texture map
         int i = 0;
         while (i < rows && getline(inputFile, line))
         {
             if (line.empty() || line[0] == '#')
                 continue;
             istringstream ss(line);
-            for (int j = 0; j < cols; j++) // expects the file to strictly have 53 entries per row.
+            for (int j = 0; j < cols; j++)
                 ss >> layoutTex[i][j];
             i++;
         }
@@ -562,8 +631,58 @@ void loadGrid()
                 ss >> layoutDir[d][j];
             d++;
         }
-        cerr << "Layout loaded.\n";
+        cerr << layoutFile << " loaded.\n";
     }
+
+    struct AnchorDef
+    {
+        int r, c;
+    };
+    AnchorDef *anchors[3] = {nullptr, nullptr, nullptr};
+    int anchorCount[3] = {0, 0, 0};
+
+    {
+        ifstream af("./Data-Files/anchors.txt"); // xD
+        if (!af.is_open())
+            cerr << "Failed to load anchors.txt\n";
+        else
+        {
+            for (int lvl = 0; lvl < 3 && af; lvl++)
+            {
+                string line;
+                getline(af, line);
+                // count here how many underscores per current line
+                int count = 1;
+                for (char ch : line)
+                    if (ch == '_')
+                        count++;
+
+                anchors[lvl] = new AnchorDef[count];
+                anchorCount[lvl] = 0;
+
+                istringstream ss(line);
+                string token;
+                while (getline(ss, token, '_'))
+                {
+                    int r, c;
+                    if (sscanf(token.c_str(), "%d,%d", &r, &c) == 2)
+                    {
+                        anchors[lvl][anchorCount[lvl]] = {r, c};
+                        anchorCount[lvl]++;
+                    }
+                }
+                cerr << "Level " << lvl + 1 << ": " << anchorCount[lvl] << " anchors loaded.\n";
+            }
+        }
+    }
+
+    auto isAnchorTile = [&](int r, int c) -> bool
+    {
+        for (int a = 0; a < anchorCount[activeLevel]; a++)
+            if (anchors[activeLevel][a].r == r && anchors[activeLevel][a].c == c)
+                return true;
+        return false;
+    };
 
     for (int i = 0; i < rows; i++)
     {
@@ -575,14 +694,10 @@ void loadGrid()
             int dir = layoutDir[i][j];
             int tex = layoutTex[i][j];
 
-            bool isAnchor = false;
-            if (dir > 0)
-                grid[i][j] = new pathPlot();
-            else if (i == 19 && j == 14 || i == 22 && j == 23 || i == 12 && j == 24)
-            {
+            if (isAnchorTile(i, j))
                 grid[i][j] = new anchorPlot();
-                isAnchor = true;
-            }
+            else if (dir > 0)
+                grid[i][j] = new pathPlot();
             else
                 grid[i][j] = new simplePlot();
 
@@ -591,17 +706,13 @@ void loadGrid()
             screenY -= layoutElev[i][j];
             grid[i][j]->setPosition({screenX, screenY});
 
-            // texture
-            if (isAnchor)
-            {
+            if (isAnchorTile(i, j))
                 grid[i][j]->setTextureRect(IntRect({0, 0}, {32, 32}));
-            }
             else if (tex >= 0)
                 grid[i][j]->setTextureRect(IntRect({(tex % 11) * 32, (tex / 11) * 32}, {32, 32}));
             else
                 grid[i][j]->setTextureRect(IntRect({0, 0}, {32, 32}));
 
-            // direction
             grid[i][j]->setDirection(dir);
             grid[i][j]->location[0] = i;
             grid[i][j]->location[1] = j;
@@ -632,7 +743,21 @@ bool drawGrid(RenderWindow &window)
     window.draw(infoScroll);
     window.draw(waveInfo);
     window.draw(healthText);
-    for(int i=0;i<5;i++)
-    window.draw(hearts[i]);
+    for (int i = 0; i < 5; i++)
+        window.draw(hearts[i]);
     return false;
+}
+
+void destroyGrid()
+{
+    for (int i = 0; i < rows; i++)
+        for (int j = 0; j < cols; j++)
+        {
+            delete grid[i][j];
+            grid[i][j] = nullptr;
+        }
+
+    handler = gridClickHandler();
+    masterManager.reset();
+    cerr << "Grid destroyed.\n";
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include<SFML/Graphics.hpp>
 using namespace sf;
+using namespace std;
 typedef bool (*drawerFunction)(RenderWindow &window);
 
 class displayQueue
@@ -214,25 +215,52 @@ public:
 template<typename Tow>
 class TowerManager{
     Tow** stack = nullptr;
-    int count=0;
-    public:
-    void pushBack(Tow* input){
-        Tow** temp = new Tow*[count+1];
-        for(int i=0;i<count;i++){
+    int count = 0;
+public:
+    int pushBack(Tow* input){
+        Tow** temp = new Tow*[count + 1];
+        for(int i = 0; i < count; i++){
             temp[i] = stack[i];
         }
         temp[count] = input;
         delete[] stack;
         stack = temp;
         count++;
+        return count - 1;
     }
+    
+    void removeAtIndex(int index){
+        if (index < 0 || index >= count) return;
+        if (count == 1) {
+            delete[] stack;
+            stack = nullptr;
+            count = 0;
+            return;
+        }
+        
+        Tow** temp = new Tow*[count - 1];
+        int tempIdx = 0;
+        for (int i = 0; i < count; i++) {
+            if (i != index) {
+                temp[tempIdx++] = stack[i];
+            }
+        }
+        delete[] stack;
+        stack = temp;
+        count--;
+    }
+    
     void handleEvents(Event& ev){
-        for(int i=0;i<count;i++){
+        for(int i = 0; i < count; i++){
+            if(stack[i] == nullptr) continue;
             stack[i]->handleEvents(ev);
         }
     }
+    
+    ~TowerManager(){
+        delete[] stack;
+    }
 };
-
 struct CircularButton{
     CircleShape base;
     CircleShape visual;
