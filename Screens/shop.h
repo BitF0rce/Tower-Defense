@@ -25,13 +25,14 @@ Text shopPriceTexts[5] = {Text(infoFont), Text(infoFont), Text(infoFont), Text(i
 void loadBankData();
 void updateShopInfoBoxes();
 void updateGoldDisplay();
+void saveBankData();
 
 void loadBankData()
 {
     ifstream bankFile("./Data-Files/bank.txt");
     if (!bankFile.is_open())
     {
-        cerr << "Failed to open bank.txt! Using default values.\n";
+        cerr << "ERROR : Failed to open bank.txt! Using default values.\n";
         currentGold = 500;
         int defaultPrices[5][5] = {
             {100, 200, 300, 400, 500},
@@ -59,7 +60,7 @@ void loadBankData()
             }
         }
         levelFile.close();
-        cerr << "Tower levels loaded.\n";
+        cerr << "MANAGER : Tower levels loaded.\n";
     }
     else
     {
@@ -86,15 +87,6 @@ void loadBankData()
     }
 
     bankFile.close();
-    cerr << "Gold : " << currentGold;
-    for (int i = 0; i < 5; i++)
-    {
-        for (int j = 0; j < 5; j++)
-        {
-            cerr << towerPrices[i][j] << " , ";
-        }
-        cerr << endl;
-    }
 }
 
 void saveBankData()
@@ -102,7 +94,7 @@ void saveBankData()
     ofstream bankFile("./Data-Files/bank.txt");
     if (!bankFile.is_open())
     {
-        cerr << "Failed to open bank.txt for saving data!\n";
+        cerr << "ERROR : Failed to open bank.txt for saving data!\n";
         return;
     }
     bankFile << currentGold << "\n";
@@ -118,7 +110,6 @@ void saveBankData()
     }
 
     bankFile.close();
-    cerr << "Bank data saved. Gold: " << currentGold << "\n";
     ofstream levelFile("./Data-Files/towerLevels.txt");
     if (levelFile.is_open())
     {
@@ -127,11 +118,10 @@ void saveBankData()
             levelFile << towerLevels[i] << "\n";
         }
         levelFile.close();
-        cerr << "Tower levels saved.\n";
     }
     else
     {
-        cerr << "Failed to Open towerLevels.txt!\n";
+        cerr << "ERROR : Failed to Open towerLevels.txt!\n";
     }
 }
 
@@ -140,7 +130,6 @@ void handleUpgrade(int towerIndex)
 {
     if (towerMaxed[towerIndex])
     {
-        cerr << "Tower " << towerIndex << " is already max level!\n";
         return;
     }
 
@@ -149,7 +138,6 @@ void handleUpgrade(int towerIndex)
 
     if (nextLevel > 5)
     {
-        cerr << "Tower " << towerIndex << " cannot exceed level 5!\n";
         return;
     }
 
@@ -165,11 +153,10 @@ void handleUpgrade(int towerIndex)
         if (nextLevel == 5)
         {
             towerMaxed[towerIndex] = true;
-            cerr << "Tower " << towerIndex << " reached MAX level!\n";
         }
         else
         {
-            cerr << "Tower " << towerIndex << " upgraded to level " << nextLevel << "!\n";
+            // cerr << "Tower " << towerIndex << " upgraded to level " << nextLevel << "!\n";
         }
 
         updateShopInfoBoxes();
@@ -177,7 +164,7 @@ void handleUpgrade(int towerIndex)
     }
     else
     {
-        cerr << "Not enough gold! Need " << price << " G, have " << currentGold << " G\n";
+        // cerr << "Not enough gold! Need " << price << " G, have " << currentGold << " G\n";
     }
 }
 void initGoldDisplay()

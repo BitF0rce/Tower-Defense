@@ -10,20 +10,22 @@ using namespace sf;
 class Bullet;
 class Enemy;
 class Tower;
+class ShotGun;
 extern TowerManager<Tower> allTowers;
 extern int towerLevels[5];
+bool gamePaused = false;
 
 bool drawBullet(RenderWindow &window, Bullet &obj);
 extern displayQueue queue;
 extern TypedDisplayQueue<Bullet, Enemy> bulletDisplayQueue;
 
 int openAnchorRow = 0, openAnchorCol = 0;
-Texture archer("/home/shaaf/Desktop/Tower-Defense/Assets/towers.png");
-Texture bulletSheet("/home/shaaf/Desktop/Tower-Defense/Assets/Fireball.png");
+Texture archer("./Assets/towers.png");
+Texture bulletSheet("./Assets/Fireball.png");
 
 class Bullet
 {
-    protected:
+protected:
     Enemy *targetEnemy = nullptr;
     RectangleShape bulletBase;
     Vector2f startPos, destination, distance;
@@ -33,11 +35,12 @@ class Bullet
     int frameNumber = 0;
     int frameRowNumber = 0;
     Clock clk;
-    string type="normal";
+    string type = "normal";
     float damageDelt = 10.f; // Standard Damage
 
 public:
     friend class TypedDisplayQueue<Bullet, Enemy>;
+    friend class ShotGun;
     Bullet()
     {
         speed = 8;
@@ -62,7 +65,8 @@ public:
             frameRowNumber = 6; // Bottom
         else if (angle >= 112.5 && angle < 157.5)
             frameRowNumber = 7; // Bottom-Left
-        else if (angle >= 157.5 && angle < 202.5){
+        else if (angle >= 157.5 && angle < 202.5)
+        {
             frameRowNumber = 0; // Left
         }
         else if (angle >= 202.5 && angle < 247.5)
@@ -109,7 +113,9 @@ public:
 
 bool drawBullet(RenderWindow &window, Bullet &obj)
 {
-    if (obj.clk.getElapsedTime().asMilliseconds() >= 15)
+    if (gamePaused)
+        ;
+    if (obj.clk.getElapsedTime().asMilliseconds() >= 15 && !gamePaused)
     {
         obj.frameNumber += 1;
         obj.bulletBase.setTextureRect({{(obj.frameNumber % 8) * 64, obj.frameRowNumber * 54}, {64, 54}});
@@ -121,7 +127,8 @@ bool drawBullet(RenderWindow &window, Bullet &obj)
             return true;
         }
     }
-    if(obj.type != "slowEffect"){
+    if (obj.type != "slowEffect")
+    {
         window.draw(obj.bulletBase);
     }
     return false;
@@ -140,9 +147,10 @@ protected:
     Bullet magazine[15];
     Clock attackTimer;
     float hitDelay, bulletSpeed = 6.0f;
-    string shootType="normal";
+    string shootType = "normal";
     float damageInduced = 10.f;
     int eventManagerIndex;
+
 public:
     Tower(int a, int b)
     {
@@ -153,8 +161,8 @@ public:
         plotRow = a;
         plotCol = b;
         ammunition = 0;
-        hitDelay= 1000;
-        void (*onClick)(Event& ev);
+        hitDelay = 1000;
+        void (*onClick)(Event &ev);
     }
     virtual void draw(RenderWindow &window)
     {
@@ -162,6 +170,8 @@ public:
     }
     virtual void attack(Enemy *target, Vector2f targetPos, Vector2f targetVelocity)
     {
+        if (gamePaused)
+            return;
         if (attackTimer.getElapsedTime().asMilliseconds() <= hitDelay)
         {
             return;
@@ -180,7 +190,7 @@ public:
                 float timeToImpact = distance / bulletSpeed;
                 Vector2f predictedPos = targetPos + (targetVelocity * timeToImpact);
 
-                magazine[i].startPos = {this->position.x, this->position.y-68};
+                magazine[i].startPos = {this->position.x, this->position.y - 68};
                 magazine[i].destination = predictedPos;
                 magazine[i].speed = bulletSpeed;
                 magazine[i].type = shootType;
@@ -205,27 +215,33 @@ public:
     {
         return attackRadius;
     }
-    virtual void handleEvents(Event& ev){
-
+    virtual void handleEvents(Event &ev)
+    {
+    }
+    virtual ~Tower()
+    {
+        tex = nullptr;
     }
 };
 
-
-class SniperTower : public Tower{
-    public:
+class SniperTower : public Tower
+{
+public:
     SniperTower(int a, int b) : Tower(a, b)
     {
+        int level = towerLevels[0];
+        damageInduced = 40.f + (level-1)*10.f;
         attackRadius = 20;
-        hitDelay = 1000;
-        bulletSpeed = 10.0f;
+        hitDelay = 750;
+        bulletSpeed = 15.0f;
         towerBase.setSize({123.f, 159.f});
         towerBase.setOrigin({61.f, 158.f});
         towerBase.setTexture(&archer);
         towerBase.setTextureRect({{14, 14}, {126, 151}});
         towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 35.f;
     }
-    int getRadius() override{
+    int getRadius() override
+    {
         switch (towerLevels[0])
         {
         case 1:
@@ -246,13 +262,13 @@ class SniperTower : public Tower{
     }
 };
 
-
-
 class MachineGunTower : public Tower
 {
 public:
     MachineGunTower(int a, int b) : Tower(a, b)
     {
+        int level = towerLevels[1];
+        damageInduced = 20.f + (level-1)*6.f;
         attackRadius = 9;
         hitDelay = 15;
         towerBase.setSize({123.f, 159.f});
@@ -260,9 +276,9 @@ public:
         towerBase.setTexture(&archer);
         towerBase.setTextureRect({{17, 191}, {123, 159}});
         towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 20.f;
     }
-    int getRadius() override{
+    int getRadius() override
+    {
         switch (towerLevels[1])
         {
         case 1:
@@ -283,11 +299,13 @@ public:
     }
 };
 
-class CannonTower: public Tower
+class CannonTower : public Tower
 {
 public:
     CannonTower(int a, int b) : Tower(a, b)
     {
+        int level = towerLevels[2];
+        damageInduced = 75.f + (level-1)*20.f;
         attackRadius = 20;
         hitDelay = 2500;
         towerBase.setSize({112.f, 137.f});
@@ -295,9 +313,9 @@ public:
         towerBase.setTexture(&archer);
         towerBase.setTextureRect({{148, 13}, {127, 156}});
         towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 75;
     }
-    int getRadius() override{
+    int getRadius() override
+    {
         switch (towerLevels[2])
         {
         case 1:
@@ -318,23 +336,25 @@ public:
     }
 };
 
-
-class SlowTower : public Tower{
-    public:
+class SlowTower : public Tower
+{
+public:
     SlowTower(int a, int b) : Tower(a, b)
     {
+        int level = towerLevels[3];
+        damageInduced = 3.f + (level-1)*10.f;
         attackRadius = 15;
         hitDelay = 0;
         bulletSpeed = 20.0f;
-        shootType= "slowEffect";
+        shootType = "slowEffect";
         towerBase.setSize({123.f, 159.f});
         towerBase.setOrigin({61.f, 158.f});
         towerBase.setTexture(&archer);
         towerBase.setTextureRect({{280, 10}, {122, 156}});
         towerBase.setScale({0.4f, 0.4f});
-        damageInduced = 3.f;
     }
-    int getRadius() override{
+    int getRadius() override
+    {
         switch (towerLevels[3])
         {
         case 1:
@@ -354,6 +374,80 @@ class SlowTower : public Tower{
         }
     }
 };
+
+class ShotGun : public Tower
+{
+public:
+    ShotGun(int a, int b) : Tower(a, b)
+    {
+        int level = towerLevels[0];
+        damageInduced = 15.f + (level-1)*15.f;
+        attackRadius = 12;
+        hitDelay = 700;
+        bulletSpeed = 7.0f;
+        shootType = "spread";
+        towerBase.setSize({123.f, 159.f});
+        towerBase.setOrigin({61.f, 158.f});
+        towerBase.setTexture(&archer);
+        towerBase.setTextureRect({{411, 184}, {122, 156}});
+        towerBase.setScale({0.4f, 0.4f});
+    }
+
+    void attack(Enemy *target, Vector2f targetPos, Vector2f targetVelocity) override
+    {
+        if (attackTimer.getElapsedTime().asMilliseconds() <= hitDelay)
+            return;
+        attackTimer.restart();
+        for (int j = 0; j < 3; j++)
+        {
+            for (int i = 0; i < 15; i++)
+            {
+                if (magazine[i].available)
+                {
+                    magazine[i].targetEnemy = target;
+
+                    Vector2f spreadPos = targetPos;
+                    spreadPos.x += (j - 1) * 30.f; // sequence : -1, 0,1
+                    spreadPos.y += (j - 1) * 20.f;
+
+                    magazine[i].startPos = {this->position.x, this->position.y - 68};
+                    magazine[i].destination = spreadPos;
+                    magazine[i].speed = bulletSpeed;
+                    magazine[i].type = shootType;
+                    magazine[i].damageDelt = damageInduced;
+                    magazine[i].shoot();
+                    break;
+                }
+            }
+        }
+    }
+
+    int getRadius() override
+    {
+        switch (towerLevels[4])
+        {
+        case 1:
+            return 12;
+            break;
+        case 2:
+            return 14;
+            break;
+        case 3:
+            return 16;
+            break;
+        case 4:
+            return 18;
+            break;
+        case 5:
+            return 20;
+            break;
+        default:
+            return 12;
+            break;
+        }
+    }
+};
+
 // AnchroPlot holds Tower*
 // Menu Chooses a Tower -> Tower* becomes the selected tower
 // Sets Tower Position to plot Position & Assigns it the tile coords.

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <SFML/Graphics.hpp>
 #include "../Screens/towerMenu.h"
+#include "../Screens/shop.h"
 #include "../Utility-Classes/displayQueue.h"
 #include "Tower.h"
 #include <fstream>
@@ -10,7 +11,7 @@ using namespace std;
 using namespace sf;
 
 
-
+extern bool gamePaused;
 bool gameOver = false;
 int currentLevelIndex = 0;
 extern displayQueue queue;
@@ -19,6 +20,31 @@ extern EventHandler anchorHover;
 extern EventHandler overlayPromptEvents;
 extern int activeLevel;
 
+Texture callEnemy("./Assets/callEnemy.png");
+CircleShape spawnButton;
+extern EventHandler inGameEvents;
+RectangleShape infoScroll;
+Texture scrollTexture("./Assets/infoScroll.png");
+Font infoFont("./Fonts/BlockCraft.otf");
+Text waveInfo(infoFont);
+Text healthText(infoFont);
+RectangleShape hearts[5];
+Texture heartsTexture("./Assets/hearts.png");
+
+Text goldTextGame(infoFont);
+RectangleShape goldIcon;
+Texture goldTexture("./Assets/coin.png");
+extern int currentGold;
+extern Texture overlayButton_texture;
+bool overlayActive = false;
+bool overlayIsWin = false;
+Text overlayTitle(infoFont);
+Text overlayReplay(infoFont);
+Text overlayMenu(infoFont);
+RectangleShape overlayBox;
+RectangleShape replayBtn, menuBtn;
+RectangleShape overlayDarkEffect({1200,700});
+
 void onSpawnButtonClick();
 bool waitingForSpawn = true; // Backward declaration for enemy.h
 void loadPoints();
@@ -26,12 +52,69 @@ void handleOverlayClick(const Event &ev);
 // Backward declaration to make it work in main.h as it is now included by Enemy.h
 void loadLevel(int level);
 bool drawLevel(RenderWindow &window);
+void handlePauseOverlay(const Event& ev);
 
 Texture Path("./Assets/isometric/separated-images/tile_114.png");
 Texture Path2("./Assets/isometric/separated-images/tile_009.png");
 Texture towerTexture("./Assets/isometric/separated-images/tile_063.png");
 Texture towerHoverTexture("./Assets/outlineTexture.png");
 Texture tileSheet("./Assets/isometric/spritesheet.png");
+
+CircleShape pauseButton(50.f);
+Texture pause_texture("./Assets/pause.png");
+Texture play_texture("./Assets/play.png");
+
+
+bool purchasePromptActive = false;
+int pendingTowerSelection = -1;
+RectangleShape purchaseBox;
+Text purchaseText(infoFont);
+RectangleShape yesBtn, noBtn;
+Text yesText(infoFont), noText(infoFont);
+string towerNames[5] = {"Sniper" , "MachineGun" , "Cannon" , "Slow Tower" , "ShotGun"};
+int towerPurchase[5] =  {75, 150, 100 , 200, 60};
+void initPurchasePrompt() {
+    purchaseBox.setSize({400.f, 200.f});
+    purchaseBox.setOrigin({200.f, 100.f});
+    purchaseBox.setPosition({600.f, 350.f});
+    purchaseBox.setTexture(&scrollTexture);
+    purchaseBox.setTextureRect({{32, 27}, {589, 332}});
+    purchaseText.setCharacterSize(22);
+    purchaseText.setFillColor(Color::Black);
+
+    yesBtn.setSize({100.f, 40.f});
+    yesBtn.setOrigin({50.f, 20.f});
+    yesBtn.setPosition({530.f, 390.f});
+    yesBtn.setTexture(&overlayButton_texture);
+    yesBtn.setTextureRect({{42, 144}, {219, 117}});
+
+    noBtn.setSize({100.f, 40.f});
+    noBtn.setOrigin({50.f, 20.f});
+    noBtn.setPosition({670.f, 390.f});
+    noBtn.setTexture(&overlayButton_texture);
+    noBtn.setTextureRect({{42, 144}, {219, 117}});
+
+    yesText.setString("YES");
+    noText.setString("NO");
+    yesText.setCharacterSize(20);
+    noText.setCharacterSize(20);
+    yesText.setOrigin({yesText.getLocalBounds().size.x/2, yesText.getLocalBounds().size.y/2+10});
+    noText.setOrigin({noText.getLocalBounds().size.x/2, noText.getLocalBounds().size.y/2+10});
+    yesText.setPosition(yesBtn.getPosition());
+    noText.setPosition(noBtn.getPosition());
+}
+
+bool drawPurchasePrompt(RenderWindow &window) {
+    if (!purchasePromptActive) return true;
+    window.draw(overlayDarkEffect);
+    window.draw(purchaseBox);
+    window.draw(purchaseText);
+    window.draw(yesBtn);
+    window.draw(noBtn);
+    window.draw(yesText);
+    window.draw(noText);
+    return false;
+}
 
 int getDirection(float screenX, float screenY);
 class Plot;
@@ -46,7 +129,7 @@ const int rows = 52,
 
 void placeHolderFunction(Plot *object)
 {
-    // DOES NOTHING
+
 }
 
 pair<int, int> screenToTile(float screenX, float screenY)
@@ -304,7 +387,7 @@ public:
 };
 
 EnemyManager masterManager;
-
+Texture anchor_texture("./Assets/isometric/pathPlot.png");
 void towerMenu(Plot *object);
 void hover(const Event &ev);
 class anchorPlot : public Plot
@@ -320,7 +403,8 @@ public:
     anchorPlot()
     {
         onclick = towerMenu;
-        plotBase.setTexture(&tileSheet);
+        plotBase.setTexture(&anchor_texture);
+        plotBase.setTextureRect({{0,0},{32,32}});
         Vector2u size = towerHoverTexture.getSize();
         projection.setSize({200.f, 400.f});
         projection.setTextureRect({{400, 0}, {700, (int)size.y - 100}});
@@ -363,7 +447,7 @@ public:
         else if (a == 3)
             towerPointer = new SlowTower(location[0], location[1]);
         else if (a == 4)
-            towerPointer = new CannonTower(location[0], location[1]);
+            towerPointer = new ShotGun(location[0], location[1]);
         Vector2f pos = this->getPosition();
         towerPointer->setPosition({pos.x + tileW / 2.f, pos.y + tileH * 1.5f});
         masterManager.pushBack({location[0], location[1]}, towerPointer->getRadius(), towerPointer);
@@ -389,8 +473,6 @@ public:
     }
     int getRadius()
     {
-        cerr << "Inside Plot...";
-
         return towerPointer->getRadius();
     }
 };
@@ -407,40 +489,46 @@ void click(const Event &ev)
         towerMenuEvents.pause();
         anchorHover.resume();
     }
-    else if (ev.getIf<Event::MouseButtonPressed>())
+    else if (const auto mb = ev.getIf<Event::MouseButtonPressed>())
     {
-        Vector2f mousePos = Vector2f(ev.getIf<Event::MouseButtonPressed>()->position);
-        bool Proceed = false;
-        int selection;
-        for (int i = 0; i < 5; i++)
-        {
-            if (tower[i].getGlobalBounds().contains(mousePos))
-            {
-                Proceed = true;
-                selection = i;
+        Vector2f mousePos = Vector2f(mb->position);
+        if (!stopDrawing && !purchasePromptActive) {
+            for (int i = 0; i < 5; i++) {
+                if (tower[i].getGlobalBounds().contains(mousePos)) {
+                    pendingTowerSelection = i;
+                    purchasePromptActive = true;
+                    
+                    string prompt = "Buy " + towerNames[i] + "\nfor " + to_string(towerPurchase[i]) + "G?";
+                    purchaseText.setString(prompt);
+                    purchaseText.setOrigin({purchaseText.getLocalBounds().size.x/2, purchaseText.getLocalBounds().size.y/2});
+                    purchaseText.setPosition({600.f, 330.f});
+                    
+                    initPurchasePrompt();
+                    queue.pushBack(drawPurchasePrompt);
+                    return; // Don't close radial menu yet
+                }
             }
         }
-        if (Proceed)
-        {
-            cerr << "Arrow Tower Has been Selected...\n";
-            anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[openAnchorRow][openAnchorCol]);
-            if (!plot->isOccupied)
-            {
-                if (selection == 0)
-                    plot->buildTower(0);
-                else if (selection == 1)
-                    plot->buildTower(1);
-                else if (selection == 2)
-                    plot->buildTower(2);
-                else if (selection == 3)
-                    plot->buildTower(3);
-                else if (selection == 4)
-                    plot->buildTower(4);
+        if (purchasePromptActive) {
+            if (yesBtn.getGlobalBounds().contains(mousePos)) {
+                if (currentGold >= towerPurchase[pendingTowerSelection]) {
+                    currentGold -= towerPurchase[pendingTowerSelection];
+                    anchorPlot *plot = dynamic_cast<anchorPlot *>(grid[openAnchorRow][openAnchorCol]);
+                    plot->buildTower(pendingTowerSelection);
+                    purchasePromptActive = false;
+                    stopDrawing = true;
+                    handler.resume();
+                    towerMenuEvents.pause();
+                    anchorHover.resume();
+                    saveBankData();
+                } else {
+                    purchaseText.setString("Not enough Gold!");
+                    purchaseText.setFillColor(Color::Red);
+                }
             }
-            stopDrawing = true;
-            handler.resume();
-            towerMenuEvents.pause();
-            anchorHover.resume();
+            else if (noBtn.getGlobalBounds().contains(mousePos)) {
+                purchasePromptActive = false;
+            }
         }
     }
 }
@@ -491,24 +579,8 @@ void towerMenu(Plot *object)
 
 // Working Starts here.
 
-Texture callEnemy("./Assets/callEnemy.png");
-CircleShape spawnButton;
-extern EventHandler inGameEvents;
-RectangleShape infoScroll;
-Texture scrollTexture("./Assets/infoScroll.png");
-Font infoFont("./Fonts/BlockCraft.otf");
-Text waveInfo(infoFont);
-Text healthText(infoFont);
-RectangleShape hearts[5];
-Texture heartsTexture("./Assets/hearts.png");
-
-RectangleShape gameOverScroll;
-Text gameOverText(infoFont);
-
 void respondSpawnRequest(const Event &ev)
 {
-
-    checkMove(gameOverScroll, ev);
     if (auto clicked = ev.getIf<Event::MouseButtonPressed>())
     {
         Vector2f pos = {(float)(clicked->position).x, (float)(clicked->position.y)};
@@ -517,9 +589,17 @@ void respondSpawnRequest(const Event &ev)
             if (waitingForSpawn)
                 onSpawnButtonClick();
         }
-    }
-    else if (auto clicked = ev.getIf<Event::MouseMoved>())
-    {
+        if(pauseButton.getGlobalBounds().contains(pos)){
+            gamePaused = true;
+            inGameEvents.pause();
+            towerMenuEvents.pause();
+            anchorHover.pause();
+            overlayPromptEvents.resume();
+            overlayReplay.setString("Resume");
+            overlayActive =true;   
+            overlayTitle.setString("Game Paused....");
+            stopDrawing = true;
+        }
     }
 }
 
@@ -533,10 +613,17 @@ void loadGrid(int level = 1)
 
     loadPoints();
 
+    pauseButton.setRadius(22.f);
+    pauseButton.setFillColor(Color::White);
+    pauseButton.setPosition({1140.f, 10.f});
+    pauseButton.setTexture(&pause_texture);
+    pauseButton.setTextureRect({{212,57},{278,261}});
+
     spawnButton.setRadius(30.f);
     spawnButton.setTexture(&callEnemy);
     spawnButton.setTextureRect({{238, 60}, {232, 238}});
     spawnButton.setFillColor(Color::White);
+    spawnButton.setPosition({30.f, 700.f - 30.f - 60.f});
     inGameEvents.addEvent(respondSpawnRequest);
     overlayPromptEvents.addEvent(handleOverlayClick);
 
@@ -554,6 +641,19 @@ void loadGrid(int level = 1)
     healthText.setPosition({930, 600});
     healthText.setCharacterSize(27);
     healthText.setFillColor(Color::Black);
+
+    goldIcon.setTexture(&goldTexture);
+    goldIcon.setTextureRect({{142, 158}, {216, 188}});
+    goldIcon.setSize({26.f, 26.f});
+    
+    float goldY = 635.f; 
+    goldIcon.setPosition({930.f, goldY});
+    goldTextGame.setFont(infoFont);
+    goldTextGame.setCharacterSize(30);
+    goldTextGame.setFillColor(Color(255, 215, 0));
+    goldTextGame.setOutlineColor(Color::Black);
+    goldTextGame.setOutlineThickness(1.f);
+    goldTextGame.setPosition({960.f, goldY - 8.f});
 
     for (int i = 0; i < 5; i++)
     {
@@ -592,7 +692,7 @@ void loadGrid(int level = 1)
     ifstream inputFile(layoutFile);
     if (!inputFile.is_open())
     {
-        cerr << "Failed to load " << layoutFile;
+        cerr << "ERROR : Failed to load Grid Layout" << layoutFile<<endl;
     }
 
     if (inputFile.is_open())
@@ -631,7 +731,6 @@ void loadGrid(int level = 1)
                 ss >> layoutDir[d][j];
             d++;
         }
-        cerr << layoutFile << " loaded.\n";
     }
 
     struct AnchorDef
@@ -644,7 +743,7 @@ void loadGrid(int level = 1)
     {
         ifstream af("./Data-Files/anchors.txt"); // xD
         if (!af.is_open())
-            cerr << "Failed to load anchors.txt\n";
+            cerr << "ERROR : Failed to load anchors.txt\n";
         else
         {
             for (int lvl = 0; lvl < 3 && af; lvl++)
@@ -671,7 +770,7 @@ void loadGrid(int level = 1)
                         anchorCount[lvl]++;
                     }
                 }
-                cerr << "Level " << lvl + 1 << ": " << anchorCount[lvl] << " anchors loaded.\n";
+                // cerr << "Level " << lvl + 1 << ": " << anchorCount[lvl] << " anchors loaded.\n";
             }
         }
     }
@@ -706,8 +805,10 @@ void loadGrid(int level = 1)
             screenY -= layoutElev[i][j];
             grid[i][j]->setPosition({screenX, screenY});
 
-            if (isAnchorTile(i, j))
-                grid[i][j]->setTextureRect(IntRect({0, 0}, {32, 32}));
+            if (isAnchorTile(i, j)){
+                grid[i][j]->setTextureRect(IntRect({0, 0}, {500, 500}));
+                grid[i][j]->move({0.f , -3.f});
+            }
             else if (tex >= 0)
                 grid[i][j]->setTextureRect(IntRect({(tex % 11) * 32, (tex / 11) * 32}, {32, 32}));
             else
@@ -740,11 +841,16 @@ bool drawGrid(RenderWindow &window)
         }
     }
     window.draw(spawnButton);
+    window.draw(pauseButton);
     window.draw(infoScroll);
     window.draw(waveInfo);
     window.draw(healthText);
     for (int i = 0; i < 5; i++)
         window.draw(hearts[i]);
+
+    goldTextGame.setString(to_string(currentGold));
+    window.draw(goldIcon);
+    window.draw(goldTextGame);
     return false;
 }
 
@@ -759,5 +865,5 @@ void destroyGrid()
 
     handler = gridClickHandler();
     masterManager.reset();
-    cerr << "Grid destroyed.\n";
+    cerr <<"DESTRUCTION : Grid destroyed Cleanly.\n";
 }

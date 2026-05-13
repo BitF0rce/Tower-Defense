@@ -1,4 +1,4 @@
-int playerHealth = 4;
+float playerHealth = 5;
 #include <iostream>
 #include <SFML/Graphics.hpp>
 #include <SFML/System.hpp>
@@ -21,6 +21,9 @@ EventHandler mapClicks;
 EventHandler inGameEvents;
 EventHandler overlayPromptEvents;
 EventHandler shopEvents;
+EventHandler instructionEvents;
+EventHandler settingsEvents;
+
 
 TypedDisplayQueue<Bullet , Enemy> bulletDisplayQueue;
 TowerManager<Tower> allTowers;
@@ -54,7 +57,7 @@ int main()
                 Vector2f mousePos = Vector2f(mouseMoved->position);
                 auto [tileRow, tileCol] = screenToTile(mousePos.x, mousePos.y);
 
-                cout << "Clicked: " << tileRow << " , " << tileCol <<" "<<mousePos.x<<" | "<<mousePos.y<<endl;
+                // cout << "Clicked: " << tileRow << " , " << tileCol <<" "<<mousePos.x<<" | "<<mousePos.y<<endl;
 
                 if (tileRow >= 0 && tileRow < rows && tileCol >= 0 && tileCol < cols)
                     handler.handleClick(tileRow, tileCol);
@@ -66,6 +69,8 @@ int main()
             inGameEvents.handleEvents(*event);
             overlayPromptEvents.handleEvents(*event);
             shopEvents.handleEvents(*event);
+            instructionEvents.handleEvents(*event);
+            settingsEvents.handleEvents(*event);
         }
         if (goBackToMenu) {
             goBackToMenu = false;

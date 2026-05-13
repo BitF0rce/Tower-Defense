@@ -5,24 +5,30 @@
 #include "../Utility-Classes/displayQueue.h"
 #include "../Game-Classes/Plot.h"
 #include"shop.h"
+#include "MapCarousel.h"
+#include "instructions.h"
+#include "settings.h"
 using namespace sf;
 using namespace std;
+
 
 RenderWindow *gameWindow;
 extern EventHandler mainMenuClicks;
 extern EventHandler mapClicks;
 extern EventHandler shopEvents;
 
+MapCarousel mapSelector;
+Texture mapThumbnails[3] = {Texture("./Assets/Map-Items/level_1.png") , Texture("./Assets/Map-Items/level_2.png") , Texture("./Assets/Map-Items/level_3.png")};
+Texture arrowTex;
 
 
 bool stopMenu = false;
 bool stopMap = false;
+int tempGold = 0;
 
 bool drawMap(RenderWindow &window);
 void loadMap();
 void handleMapEvents(const Event &ev);
-bool displayMenu(RenderWindow &window);
-void loadHomeButton();
 CircularButton backToMenu;
 Texture homeButtonTexture("./Assets/Map-Items/backHome.png");
 
@@ -38,8 +44,10 @@ RectangleShape buttonHitboxes[6];
 Sprite mainMenu(mainMenuItems[0]);
 void loadMenu()
 {
-    mainMenu.setScale({0.4264f, 0.4557f});
+    loadBankData();
+    loadPoints();
 
+    mainMenu.setScale({0.4264f, 0.4557f});
     buttonHitboxes[0].setPosition({494.f, 254.f});
     buttonHitboxes[1].setPosition({490.f, 324.f});
     buttonHitboxes[2].setPosition({508.f, 395.f});
@@ -92,7 +100,7 @@ void loadShop()
     shopDisplayTowers[1].setTextureRect({{148, 13}, {126, 156}});
     shopDisplayTowers[2].setTextureRect({{17, 191}, {123, 159}});
     shopDisplayTowers[3].setTextureRect({{280, 10}, {122, 156}});
-    shopDisplayTowers[4].setTextureRect({{283, 199}, {122, 156}});
+    shopDisplayTowers[4].setTextureRect({{411, 184}, {122, 156}});
 
     shopDisplayTowers[0].setPosition({95, 200});
     shopDisplayTowers[1].setPosition({317, 200});
@@ -298,6 +306,7 @@ void handleMainEvents(const Event &ev)
             mainMenuClicks.pause();
             loadMap();
             queue.pushBack(drawMap);
+            awaitTransit.restart();
             mapClicks.addEvent(handleMapEvents);
             mapClicks.resume();
             stopMap = false;
@@ -312,8 +321,23 @@ void handleMainEvents(const Event &ev)
             mainMenuClicks.pause();
             shopEvents.resume();
             queue.pushBack(drawShop);
-
             break;
+        case 1:
+        loadInstructions();
+        stopMenu = true;
+        mainMenuClicks.pause();
+        instructionEvents.resume();
+        queue.pushBack(drawInstructions);
+        stopInstructions = false;
+        break;
+
+        case 3:
+        loadSettings();
+        stopMenu = true;
+        stopSettings = false;
+        mainMenuClicks.pause();
+        queue.pushBack(drawSettings);
+        settingsEvents.resume();
         }
     }
 }
@@ -344,80 +368,69 @@ void loadHomeButton()
     backToMenu.visual.setPosition(backToMenu.base.getPosition());
     backToMenu.position = backToMenu.base.getPosition();
 }
+
+RectangleShape mapBG({1200,700});
+Texture mapBG_texture("./Assets/Map-Items/map_0.jpeg");
+Texture leftButton_texture("./Assets/Map-Items/buttonLeft.png");
+Texture rightButton_texture("./Assets/Map-Items/buttonRight.png");
+
 void loadMap()
 {
+    mapBG.setTexture(&mapBG_texture);
+    mapBG.setFillColor(Color(255,255,255,50));
     loadHomeButton();
-    mapHitBoxes[0].setPosition({209, 462});
-    mapHitBoxes[1].setPosition({679, 118});
-    mapHitBoxes[2].setPosition({194, 38});
-
-    mapHitBoxes[0].setSize({96, 142});
-    mapHitBoxes[1].setSize({87, 150});
-    mapHitBoxes[2].setSize({172, 183});
+    loadHomeButton();
+    mapSelector = MapCarousel();
+    mapSelector.addMap(mapThumbnails[0], 1);
+    mapSelector.addMap(mapThumbnails[1], 2);
+    mapSelector.addMap(mapThumbnails[2], 3);
+    mapSelector.setButtonTextures(&leftButton_texture , &rightButton_texture);
 }
 
-void handleMapEvents(const Event &ev)
-{
-    if (const auto click = ev.getIf<Event::MouseMoved>())
-    {
-        Vector2f pos = {(float)(click->position).x, (float)(click->position).y};
-        if (backToMenu.base.getGlobalBounds().contains(pos))
-        {
-            backToMenu.hovering = true;
-        }
-        else
-        {
-            backToMenu.visual.setPosition(backToMenu.base.getPosition());
-            backToMenu.hovering = false;
-        }
-    }
-    if (const auto click = ev.getIf<Event::MouseButtonPressed>())
-    {
-        Vector2f pos = {(float)(click->position).x, (float)(click->position).y};
-        if (backToMenu.base.getGlobalBounds().contains(pos))
-        {
-            backToMenu.hovering = false;
+
+void handleMapEvents(const Event &ev) {
+    if(awaitTransit.getElapsedTime().asMilliseconds() <=500) return;
+    if (const auto click = ev.getIf<Event::MouseButtonPressed>()) {
+        Vector2f pos = {(float)click->position.x, (float)click->position.y};
+        if (backToMenu.base.getGlobalBounds().contains(pos)) {
             mapClicks.pause();
             stopMap = true;
             stopMenu = false;
             queue.pushBack(displayMenu);
             mainMenuClicks.resume();
+            return;
         }
-        else if (mapHitBoxes[0].getGlobalBounds().contains(pos))
-        {
+        mapSelector.handleInput(pos);
+        int selected = mapSelector.getSelectedLevel(pos);
+        if (selected != -1) {
             mapClicks.pause();
             stopMap = true;
-            loadGrid(1);
+            tempGold = currentGold;
+            loadGrid(selected);
             queue.pushBack(drawGrid);
-            loadLevel(1);
-            queue.pushBack(drawLevel);
-            inGameEvents.resume();
-        }
-        else if (mapHitBoxes[1].getGlobalBounds().contains(pos))
-        {
-            mapClicks.pause();
-            stopMap = true;
-            loadGrid(2);
-            queue.pushBack(drawGrid);
-            loadLevel(2);
-            queue.pushBack(drawLevel);
-            inGameEvents.resume();
-        }
-        else if (mapHitBoxes[2].getGlobalBounds().contains(pos))
-        {
-            mapClicks.pause();
-            stopMap = true;
-            loadGrid(3);
-            queue.pushBack(drawGrid);
-            loadLevel(3);
+            if(selected == 1 && currentGold < 400){
+                currentGold = 400;
+            }
+            else if(selected == 2 && currentGold < 650){
+                currentGold = 650;
+            }
+            else if(selected == 3 && currentGold < 900){
+                currentGold = 900;
+            }
+            loadLevel(selected);
+            saveBankData();
             queue.pushBack(drawLevel);
             inGameEvents.resume();
         }
     }
+    if (const auto hover = ev.getIf<Event::MouseMoved>()){
+        Vector2f pos = {(float)hover->position.x, (float)hover->position.y};
+        mapSelector.handleHover(pos);
+    }
 }
 
-bool drawMap(RenderWindow &window)
-{
+bool drawMap(RenderWindow &window) {
+
     if (backToMenu.hovering)
     {
         if (backToMenu.visual.getPosition().y >= backToMenu.position.y - backToMenu.rad)
@@ -429,8 +442,11 @@ bool drawMap(RenderWindow &window)
             }
         }
     }
-
-    window.draw(mapSprite);
+    
+    window.draw(mapBG);
+    mapSelector.update();
+    mapSelector.draw(window);
+    
     window.draw(backToMenu.visual);
     return stopMap;
 }

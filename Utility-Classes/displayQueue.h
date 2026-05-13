@@ -1,5 +1,5 @@
 #pragma once
-#include<SFML/Graphics.hpp>
+#include <SFML/Graphics.hpp>
 using namespace sf;
 using namespace std;
 typedef bool (*drawerFunction)(RenderWindow &window);
@@ -8,7 +8,7 @@ class displayQueue
 {
     drawerFunction *queue;
     int length = 0;
-    static bool emptyFunction(RenderWindow &window) {return true;};
+    static bool emptyFunction(RenderWindow &window) { return true; };
 
 public:
     displayQueue()
@@ -105,68 +105,83 @@ public:
 };
 
 typedef void (*menuEvent)(const Event &ev);
-class EventHandler{
-    menuEvent* funcArray = nullptr;
-    int count=0;
+class EventHandler
+{
+    menuEvent *funcArray = nullptr;
+    int count = 0;
     bool isPaused = true;
-    public:
-    EventHandler(){}
-    void addEvent(menuEvent func){
-        menuEvent* temp = new menuEvent[count+1];
-        for(int i=0;i<count;i++)
-        temp[i] = funcArray[i];
+
+public:
+    EventHandler() {}
+    void addEvent(menuEvent func)
+    {
+        menuEvent *temp = new menuEvent[count + 1];
+        for (int i = 0; i < count; i++)
+            temp[i] = funcArray[i];
         temp[count] = func;
-        if(funcArray!= nullptr)
-        delete[] funcArray;
+        if (funcArray != nullptr)
+            delete[] funcArray;
         funcArray = temp;
         count++;
     }
-    void pause(){
+    void pause()
+    {
         isPaused = true;
     }
-    void resume(){
+    void resume()
+    {
         isPaused = false;
     }
-    void handleEvents(const Event &ev){
-        if(isPaused){
+    void handleEvents(const Event &ev)
+    {
+        if (isPaused)
+        {
             return;
         }
-        for(int i=0; i<count;i++){
+        for (int i = 0; i < count; i++)
+        {
             funcArray[i](ev);
         }
     }
-    ~EventHandler(){
+    ~EventHandler()
+    {
         delete[] funcArray;
     }
 };
 
+template <typename T, typename K>
+class TypedDisplayQueue
+{
+    typedef bool (*drawerFunction)(RenderWindow &window, T &obj);
 
-template <typename T,typename K>
-class TypedDisplayQueue {
-    typedef bool (*drawerFunction)(RenderWindow &window, T& obj);
-
-    struct Entry{
+    struct Entry
+    {
         drawerFunction func;
-        T* obj;
-        K* target;
+        T *obj;
+        K *target;
         bool done = false;
     };
 
-    Entry* queue = nullptr;
+    Entry *queue = nullptr;
     int length = 0;
 
-    void remove(int index) {
-        if (index < 0 || index >= length) return;
-        if (length == 1) {
+    void remove(int index)
+    {
+        if (index < 0 || index >= length)
+            return;
+        if (length == 1)
+        {
             delete[] queue;
             queue = nullptr;
             length = 0;
             return;
         }
-        Entry* temp = new Entry[length - 1];
+        Entry *temp = new Entry[length - 1];
         int tempIdx = 0;
-        for (int i = 0; i < length; i++) {
-            if (i == index) continue;
+        for (int i = 0; i < length; i++)
+        {
+            if (i == index)
+                continue;
             temp[tempIdx++] = queue[i];
         }
         delete[] queue;
@@ -175,8 +190,9 @@ class TypedDisplayQueue {
     }
 
 public:
-    void pushBack(drawerFunction func, T* obj , K* target) {
-        Entry* temp = new Entry[length + 1];
+    void pushBack(drawerFunction func, T *obj, K *target)
+    {
+        Entry *temp = new Entry[length + 1];
         for (int i = 0; i < length; i++)
             temp[i] = queue[i];
         temp[length] = {func, obj, target};
@@ -185,15 +201,21 @@ public:
         length++;
     }
 
-    void runAll(RenderWindow &window) {
-        for (int i = 0; i < length; i++) {
+    void runAll(RenderWindow &window)
+    {
+        for (int i = 0; i < length; i++)
+        {
             if (queue[i].func(window, *queue[i].obj))
                 queue[i].done = true;
         }
-        for (int i = 0; i < length; i++) {
-            if (queue[i].done) {
-                if(queue[i].obj->bulletBase.getGlobalBounds().findIntersection(queue[i].target->characterBase.getGlobalBounds())){
-                    if(queue[i].obj->type == "slowEffect"){
+        for (int i = 0; i < length; i++)
+        {
+            if (queue[i].done)
+            {
+                if (queue[i].obj->bulletBase.getGlobalBounds().findIntersection(queue[i].target->characterBase.getGlobalBounds()))
+                {
+                    if (queue[i].obj->type == "slowEffect")
+                    {
                         queue[i].target->applyFreeze();
                     }
                     queue[i].target->collide(queue[i].obj->damageDelt);
@@ -206,20 +228,24 @@ public:
         }
     }
 
-    ~TypedDisplayQueue() {
+    ~TypedDisplayQueue()
+    {
         delete[] queue;
     }
 };
 
-
-template<typename Tow>
-class TowerManager{
-    Tow** stack = nullptr;
+template <typename Tow>
+class TowerManager
+{
+    Tow **stack = nullptr;
     int count = 0;
+
 public:
-    int pushBack(Tow* input){
-        Tow** temp = new Tow*[count + 1];
-        for(int i = 0; i < count; i++){
+    int pushBack(Tow *input)
+    {
+        Tow **temp = new Tow *[count + 1];
+        for (int i = 0; i < count; i++)
+        {
             temp[i] = stack[i];
         }
         temp[count] = input;
@@ -228,20 +254,25 @@ public:
         count++;
         return count - 1;
     }
-    
-    void removeAtIndex(int index){
-        if (index < 0 || index >= count) return;
-        if (count == 1) {
+
+    void removeAtIndex(int index)
+    {
+        if (index < 0 || index >= count)
+            return;
+        if (count == 1)
+        {
             delete[] stack;
             stack = nullptr;
             count = 0;
             return;
         }
-        
-        Tow** temp = new Tow*[count - 1];
+
+        Tow **temp = new Tow *[count - 1];
         int tempIdx = 0;
-        for (int i = 0; i < count; i++) {
-            if (i != index) {
+        for (int i = 0; i < count; i++)
+        {
+            if (i != index)
+            {
                 temp[tempIdx++] = stack[i];
             }
         }
@@ -249,19 +280,24 @@ public:
         stack = temp;
         count--;
     }
-    
-    void handleEvents(Event& ev){
-        for(int i = 0; i < count; i++){
-            if(stack[i] == nullptr) continue;
+
+    void handleEvents(Event &ev)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            if (stack[i] == nullptr)
+                continue;
             stack[i]->handleEvents(ev);
         }
     }
-    
-    ~TowerManager(){
+
+    ~TowerManager()
+    {
         delete[] stack;
     }
 };
-struct CircularButton{
+struct CircularButton
+{
     CircleShape base;
     CircleShape visual;
     Vector2f position;
@@ -270,52 +306,49 @@ struct CircularButton{
     float rad;
 };
 
-
-void checkMove(RectangleShape& testBox ,const Event& ev)
+void checkMove(RectangleShape &testBox, const Event &ev)
 {
-        if (const auto click = ev.getIf<Event::MouseButtonPressed>())
+    if (const auto click = ev.getIf<Event::MouseButtonPressed>())
+    {
+        Vector2f pos = {
+            (float)click->position.x,
+            (float)click->position.y};
+
+        testBox.setPosition(pos);
+    }
+
+    else if (const auto key = ev.getIf<Event::KeyPressed>())
+    {
+        if (key->code == Keyboard::Key::Left)
         {
-            Vector2f pos = {
-                (float)click->position.x,
-                (float)click->position.y};
-
-            testBox.setPosition(pos);
+            testBox.setSize({testBox.getSize().x - 1.f,
+                             testBox.getSize().y});
         }
-
-        else if (const auto key = ev.getIf<Event::KeyPressed>())
+        else if (key->code == Keyboard::Key::Right)
         {
-            if (key->code == Keyboard::Key::Left)
-            {
-                testBox.setSize({testBox.getSize().x - 1.f,
-                                 testBox.getSize().y});
-            }
-            else if (key->code == Keyboard::Key::Right)
-            {
-                testBox.setSize({testBox.getSize().x + 1.f,
-                                 testBox.getSize().y});
-            }
-            else if (key->code == Keyboard::Key::Up)
-            {
-                testBox.setSize({testBox.getSize().x,
-                                 testBox.getSize().y - 1.f});
-            }
-            else if (key->code == Keyboard::Key::Down)
-            {
-                testBox.setSize({testBox.getSize().x,
-                                 testBox.getSize().y + 1.f});
-            }
-
-            // 3. Print size + position on O press
-            else if (key->code == Keyboard::Key::O)
-            {
-                Vector2f pos = testBox.getPosition();
-                Vector2f size = testBox.getSize();
-
-                std::cout << "Position: ("
-                          << pos.x << ", " << pos.y << ")\n";
-
-                std::cout << "Size: ("
-                          << size.x << ", " << size.y << ")\n";
-            }
+            testBox.setSize({testBox.getSize().x + 1.f,
+                             testBox.getSize().y});
         }
+        else if (key->code == Keyboard::Key::Up)
+        {
+            testBox.setSize({testBox.getSize().x,
+                             testBox.getSize().y - 1.f});
+        }
+        else if (key->code == Keyboard::Key::Down)
+        {
+            testBox.setSize({testBox.getSize().x,
+                             testBox.getSize().y + 1.f});
+        }
+        else if (key->code == Keyboard::Key::O)
+        {
+            Vector2f pos = testBox.getPosition();
+            Vector2f size = testBox.getSize();
+
+            std::cout << "Position: ("
+                      << pos.x << ", " << pos.y << ")\n";
+
+            std::cout << "Size: ("
+                      << size.x << ", " << size.y << ")\n";
+        }
+    }
 }

@@ -15,8 +15,9 @@ using namespace std;
 using namespace sf;
 
 extern Plot *grid[rows][cols];
-extern int playerHealth;
+extern float playerHealth;
 extern int currentGold;
+extern bool gamePaused;
 
 Texture monster_01("./Assets/Monster_1.png");
 Texture monster_02("./Assets/Monster_2.png");
@@ -45,7 +46,7 @@ void loadPoints()
             endZoneMax[lvl] = {r2c1, r2c2};
         }
     }
-    cerr << "Points loaded.\n";
+    cerr << "Manager : Points loaded.\n";
 }
 
 Vector2f tileCenter(int row, int col)
@@ -113,41 +114,46 @@ public:
                 hearts[i].setTextureRect({{365, 26}, {294, 290}});
         }
     }
-
     virtual void updateAttachedUI()
     {
-        Vector2f pos = characterBase.getPosition();
+        Vector2f pos = tracerDot.getPosition();
         healthBarBase.setPosition({pos.x - 5.f, pos.y - 40.f});
         healthBarStatus.setPosition({pos.x - 5.f, pos.y - 40.f});
         hitBox.setPosition(pos);
-        tracerDot.setPosition({position.x, position.y - 10.f});
+        characterBase.setPosition(pos);
     }
-
     virtual void moveDown()
     {
-        characterBase.move({moveSpeed, moveSpeed / 2.f});
+        if (gamePaused)
+            return;
+        tracerDot.move({moveSpeed, moveSpeed / 2.f});
+        position = tracerDot.getPosition();
         updateAttachedUI();
-        position = hitBox.getPosition();
     }
     virtual void moveRight()
     {
-        characterBase.move({moveSpeed, -moveSpeed / 2.f});
+        if (gamePaused)
+            return;
+        tracerDot.move({moveSpeed, -moveSpeed / 2.f});
+        position = tracerDot.getPosition();
         updateAttachedUI();
-        position = hitBox.getPosition();
     }
     virtual void moveLeft()
     {
-        characterBase.move({-moveSpeed, moveSpeed / 2.f});
+        if (gamePaused)
+            return;
+        tracerDot.move({-moveSpeed, moveSpeed / 2.f});
+        position = tracerDot.getPosition();
         updateAttachedUI();
-        position = hitBox.getPosition();
     }
     virtual void moveUp()
     {
-        characterBase.move({-moveSpeed, -moveSpeed / 2.f});
+        if (gamePaused)
+            return;
+        tracerDot.move({-moveSpeed, -moveSpeed / 2.f});
+        position = tracerDot.getPosition();
         updateAttachedUI();
-        position = hitBox.getPosition();
     }
-
     virtual void attack() = 0;
 
     virtual void collide(float dmg)
@@ -157,7 +163,8 @@ public:
         health = max(health - dmg, 0.f);
         float ratio = health / maxHealth;
         healthBarStatus.setSize({healthBarBase.getSize().x * ratio, 5.f});
-        if (health <= 0){
+        if (health <= 0)
+        {
             currentGold += goldReward;
             saveBankData();
         }
@@ -180,7 +187,7 @@ public:
             if (playerHealth > 0)
             {
                 // cerr << "Enemy Reached Ending Tile....\n";
-                playerHealth--;
+                playerHealth -= 0.5;
                 updatePlayerHealth();
             }
             return true;
@@ -227,12 +234,13 @@ public:
     }
 
     bool shouldDraw() { return health > 0 && !reachedEnd; }
+    virtual void updateTexture(int a) = 0;
 };
 
 // ── Macro to reduce copy-paste in draw() ───────────────────────────────────
 // Each path-following enemy has identical tile-tracking + movement code
 #define PATH_ENEMY_UPDATE(yOffset)                                              \
-    Vector2f pos_ = characterBase.getPosition();                                \
+    Vector2f pos_ = tracerDot.getPosition();                                    \
     auto [row_, col_] = screenToTile(pos_.x, pos_.y + (yOffset));               \
     Vector2i currentTile_ = {row_, col_};                                       \
     if (currentTile_ == pendingTile)                                            \
@@ -254,6 +262,7 @@ public:
         return;                                                                 \
     int dir_ = (lastTile.x >= 0) ? grid[lastTile.x][lastTile.y]->getDirection() \
                                  : grid[row_][col_]->getDirection();            \
+    this->updateTexture(dir_);                                                  \
     switch (dir_)                                                               \
     {                                                                           \
     case 1:                                                                     \
@@ -272,7 +281,11 @@ public:
         break;                                                                  \
     }
 
-Texture goblin_texture[4] = {Texture("./Assets/Goblin/down.png"),Texture("./Assets/Goblin/right.png"),Texture("./Assets/Goblin/left.png"),Texture("./Assets/Goblin/up.png")};
+Texture goblin_texture[4] = {Texture("./Assets/Goblin/down.png"), Texture("./Assets/Goblin/right.png"), Texture("./Assets/Goblin/left.png"), Texture("./Assets/Goblin/up.png")};
+Texture wizard_texture[4] = {Texture("./Assets/Wizard/down.png"), Texture("./Assets/Wizard/right.png"), Texture("./Assets/Wizard/left.png"), Texture("./Assets/Wizard/up.png")};
+Texture tank_texture[4] = {Texture("./Assets/Tank/down.png"), Texture("./Assets/Tank/right.png"), Texture("./Assets/Tank/left.png"), Texture("./Assets/Tank/up.png")};
+Texture flash_texture[4] = {Texture("./Assets/Flash/down.png"), Texture("./Assets/Flash/right.png"), Texture("./Assets/Flash/left.png"), Texture("./Assets/Flash/up.png")};
+
 class Goblin : public Enemy
 {
 public:
@@ -280,10 +293,12 @@ public:
     {
         characterBase.setTexture(&goblin_texture[0]);
         characterBase.setSize({68.f, 68.f});
-        characterBase.setOrigin({39.f, 53.f});
-        characterBase.setPosition({position.x+(78-68) , position.y+ (106-68)});
-        characterBase.setOutlineColor(Color::Black);
-        characterBase.setOutlineThickness(3);
+        characterBase.setScale({0.6f, 0.6f});
+        characterBase.setOrigin({32.f, 42.f});
+        tracerDot.setPosition(position);
+        characterBase.setPosition(position);
+        // characterBase.setOutlineColor(Color::Black);
+        // characterBase.setOutlineThickness(3);
         health = 300;
         maxHealth = 300;
         moveSpeed = 1.5f;
@@ -295,33 +310,50 @@ public:
     {
         if (!shouldDraw())
             return;
-        if (clk.getElapsedTime().asMilliseconds() >= 20)
+        if (clk.getElapsedTime().asMilliseconds() >= 20 && !gamePaused)
         {
             clk.restart();
             currentFrame = (currentFrame + 1) % 10;
             int r = currentFrame / 5, c = currentFrame % 5;
-            if(r==1 && c>2) r=c=0;
-            characterBase.setTextureRect(IntRect({c * 68, r * 68}, {68, 68}));
+            if (r == 1 && c > 2)
+                r = c = 0;
+            characterBase.setTextureRect(IntRect({c * 68, r * 68}, {68 - 20, 68}));
             PATH_ENEMY_UPDATE(-10)
         }
         updateStatus();
         window.draw(characterBase);
         window.draw(healthBarBase);
         window.draw(healthBarStatus);
-        window.draw(tracerDot);
-        window.draw(hitBox);
+        // window.draw(hitBox);
+        // window.draw(tracerDot);
+    }
+    void updateTexture(int a)
+    {
+        if (a == 1)
+            characterBase.setTexture(&goblin_texture[0]);
+        else if (a == 2)
+            characterBase.setTexture(&goblin_texture[1]);
+        else if (a == 3)
+            characterBase.setTexture(&goblin_texture[2]);
+        else if (a == 4)
+            characterBase.setTexture(&goblin_texture[3]);
     }
 };
 
 class TankDude : public Enemy
 {
+    Clock spriteCOntrol;
+
 public:
     TankDude()
     {
-        characterBase.setTexture(&testGoblin);
-        characterBase.setSize({78.f, 106.f});
-        characterBase.setOrigin({39.f, 53.f});
+        characterBase.setTexture(&wizard_texture[0]);
+        characterBase.setSize({68.f, 68.f});
+        characterBase.setScale({0.6f, 0.6f});
+        characterBase.setOrigin({32.f, 42.f});
+        tracerDot.setPosition(position);
         characterBase.setPosition(position);
+
         health = 1200;
         maxHealth = 1200;
         moveSpeed = 0.8f;
@@ -333,19 +365,36 @@ public:
     {
         if (!shouldDraw())
             return;
-        if (clk.getElapsedTime().asMilliseconds() >= 20)
+
+        if (clk.getElapsedTime().asMilliseconds() >= 20 && !gamePaused)
         {
             clk.restart();
-            currentFrame = (currentFrame + 1) % 8;
-            int r = currentFrame / 3, c = currentFrame % 3;
-            characterBase.setTextureRect(IntRect({c * 256, r * 256}, {256, 256}));
             PATH_ENEMY_UPDATE(-10)
+        }
+        if (spriteCOntrol.getElapsedTime().asMilliseconds() >= 35 && !gamePaused)
+        {
+            spriteCOntrol.restart();
+            currentFrame = (currentFrame + 1) % 10;
+            int r = currentFrame / 5, c = currentFrame % 5;
+            if (r == 1 && c > 2)
+                r = c = 0;
+            characterBase.setTextureRect(IntRect({c * 68, r * 68}, {68 - 20, 68}));
         }
         updateStatus();
         window.draw(characterBase);
         window.draw(healthBarBase);
         window.draw(healthBarStatus);
-        window.draw(tracerDot);
+    }
+    void updateTexture(int a)
+    {
+        if (a == 1)
+            characterBase.setTexture(&tank_texture[0]);
+        else if (a == 2)
+            characterBase.setTexture(&tank_texture[1]);
+        else if (a == 3)
+            characterBase.setTexture(&tank_texture[2]);
+        else if (a == 4)
+            characterBase.setTexture(&tank_texture[3]);
     }
 };
 
@@ -357,10 +406,13 @@ class FlashDude : public Enemy
 public:
     FlashDude()
     {
-        characterBase.setTexture(&testGoblin);
-        characterBase.setSize({78.f, 106.f});
-        characterBase.setOrigin({39.f, 53.f});
+        characterBase.setTexture(&flash_texture[0]);
+        characterBase.setSize({92.f, 92.f});
+        characterBase.setScale({0.5f, 0.5f});
+        characterBase.setOrigin({38.f, 42.f});
+        tracerDot.setPosition(position);
         characterBase.setPosition(position);
+
         health = 500;
         maxHealth = 500;
         moveSpeed = baseSpeed;
@@ -393,85 +445,81 @@ public:
         }
 
         int interval = (moveSpeed > 2.5f) ? 20 : 15;
-        if (clk.getElapsedTime().asMilliseconds() >= interval)
+        if (clk.getElapsedTime().asMilliseconds() >= interval && !gamePaused)
         {
             clk.restart();
             currentFrame = (currentFrame + 1) % 8;
-            int r = currentFrame / 3, c = currentFrame % 3;
-            characterBase.setTextureRect(IntRect({c * 256, r * 256}, {256, 256}));
+            characterBase.setTextureRect(IntRect({currentFrame * 92, 0}, {92, 92}));
             PATH_ENEMY_UPDATE(-10)
         }
         updateStatus();
         window.draw(characterBase);
         window.draw(healthBarBase);
         window.draw(healthBarStatus);
-        window.draw(tracerDot);
+    }
+    void updateTexture(int a)
+    {
+        if (a == 1)
+            characterBase.setTexture(&flash_texture[0]);
+        else if (a == 2)
+            characterBase.setTexture(&flash_texture[1]);
+        else if (a == 3)
+            characterBase.setTexture(&flash_texture[2]);
+        else if (a == 4)
+            characterBase.setTexture(&flash_texture[3]);
     }
 };
 
+Texture jahaaz_texture("./Assets/Jahaaz/up.png");
+
 class Jahaaz : public Enemy
 {
-    Vector2f waypoints[4];
+    Vector2f waypoints[3];
     int waypointIndex = 0;
-    Vector2f unitVector = {1.f, 0.f};
-    bool reachedEndZone = false;
+    Vector2f unitVector = {0.f, 0.f};
 
     void computeUnitVector()
     {
-        if (waypointIndex >= 4)
+        if (waypointIndex >= 3)
             return;
-        Vector2f diff = waypoints[waypointIndex] - position;
+        Vector2f diff = waypoints[waypointIndex] - tracerDot.getPosition();
         float len = sqrt(diff.x * diff.x + diff.y * diff.y);
         if (len > 0.f)
             unitVector = diff / len;
     }
 
-    Vector2f getRandomPointInEndZone()
+    Vector2f getEndZoneCenter()
     {
         Vector2i min = endZoneMin[activeLevel];
         Vector2i max = endZoneMax[activeLevel];
-        int randomRow = min.x + (rand() % (max.x - min.x + 1)); // Basically : start + (rand() % difference)
-        int randomCol = min.y + (rand() % (max.y - min.y + 1));
-
-        float screenX = originX + (randomCol - randomRow) * (tileW / 2.f) + tileW / 2.f;
-        float screenY = originY + (randomCol + randomRow) * (tileH / 2.f) + tileH / 2.f;
-
-        return {screenX, screenY};
+        int midRow = (min.x + max.x) / 2;
+        int midCol = (min.y + max.y) / 2;
+        return tileCenter(midRow, midCol);
     }
 
 public:
     Jahaaz()
     {
-        characterBase.setTexture(&testGoblin);
-        characterBase.setSize({78.f, 106.f});
-        characterBase.setOrigin({39.f, 53.f});
+        characterBase.setTexture(&jahaaz_texture);
+        characterBase.setSize({92.f, 92.f});
+        characterBase.setScale({0.5f, 0.5f});
+        characterBase.setOrigin({38.f, 42.f});
 
         Vector2f start = tileCenter(spawnTile[activeLevel].x, spawnTile[activeLevel].y);
-        characterBase.setPosition(start);
+        tracerDot.setPosition(start);
+        tracerDot.setRadius(2);
         position = start;
+        characterBase.setPosition(start);
 
         health = 800;
         maxHealth = 800;
         moveSpeed = 1.8f;
         goldReward = 12;
-        tracerDot.setRadius(2);
-
-        Vector2f end = getRandomPointInEndZone();
-        srand((unsigned)time(nullptr) + (unsigned)(size_t)this);
 
         waypoints[0] = start;
-        int numWaypoints = 2;
+        waypoints[1] = {600.f, 350.f};
+        waypoints[2] = getEndZoneCenter();
 
-        for (int i = 1; i <= numWaypoints; i++)
-        {
-            float t = (float)i / 3.f; // Central Translation.
-            float jitter = 200.f;     // Shoot off the central translation in either positive or negative....
-            waypoints[i] = {
-                start.x * (1 - t) + end.x * t + (rand() % 2 == 0 ? 1 : -1) * (rand() % (int)jitter), //  Basically : intermediate point bw start&end jitter*1 or jitter*-1 (random)
-                start.y * (1 - t) + end.y * t + (rand() % 2 == 0 ? 1 : -1) * (rand() % (int)jitter)};
-        }
-
-        waypoints[3] = end;
         waypointIndex = 1;
         computeUnitVector();
     }
@@ -480,16 +528,15 @@ public:
 
     void moveLinearly()
     {
-        if (waypointIndex >= 4)
-        {
+        if (gamePaused || waypointIndex >= 3)
             return;
-        }
 
-        characterBase.move(unitVector * moveSpeed);
-        position = characterBase.getPosition();
+        tracerDot.move(unitVector * moveSpeed);
+        position = tracerDot.getPosition();
         updateAttachedUI();
+
         Vector2f diff = waypoints[waypointIndex] - position;
-        if (sqrt(diff.x * diff.x + diff.y * diff.y) < moveSpeed * 3.f)
+        if (sqrt(diff.x * diff.x + diff.y * diff.y) < moveSpeed * 2.f)
         {
             waypointIndex++;
             computeUnitVector();
@@ -503,60 +550,30 @@ public:
 
     Vector2f getVelocity() override { return unitVector * moveSpeed; }
 
-    bool checkIfInEndZone()
-    {
-        Vector2i mn = endZoneMin[activeLevel];
-        Vector2i mx = endZoneMax[activeLevel];
-
-        auto [row, col] = screenToTile(position.x, position.y);
-        bool inZone = (row >= mn.x && row <= mx.x && col >= mn.y && col <= mx.y);
-
-        if (!reachedEndZone && inZone)
-        {
-            reachedEndZone = true;
-            health = 0;
-            if (playerHealth > 0)
-            {
-                playerHealth--;
-                updatePlayerHealth();
-            }
-            return true;
-        }
-        return false;
-    }
-
     void draw(RenderWindow &window) override
     {
         if (!shouldDraw())
             return;
-        if (checkIfInEndZone())
-        {
-            reachedEnd = true;
+        auto [row, col] = screenToTile(position.x, position.y);
+        if (checkEndTile(row, col))
             return;
-        }
 
-        if (position.x > 1250.f || position.x < -50.f || position.y > 750.f || position.y < -50.f)
-        {
-            health = 0;
-            return;
-        }
-
-        if (clk.getElapsedTime().asMilliseconds() >= 20)
+        if (clk.getElapsedTime().asMilliseconds() >= 20 && !gamePaused)
         {
             clk.restart();
-            currentFrame = (currentFrame + 1) % 8;
-            int r = currentFrame / 3, c = currentFrame % 3;
-            characterBase.setTextureRect(IntRect({c * 256, r * 256}, {256, 256}));
 
-            auto [row, col] = screenToTile(position.x, position.y);
+            currentFrame = (currentFrame + 1) % 15;
+            int r = currentFrame/5 , c = currentFrame %5;
+            if(r>1 && c>0) currentFrame = r = c = 0;  
+            characterBase.setTextureRect(IntRect({c* 80, r*80}, {80, 80}));
+
             Vector2i currentTile = {row, col};
             if (currentTile != lastTile)
             {
-                masterManager.poll(this, currentTile,
-                                   {position.x - 21.f, position.y - 23.f},
-                                   getVelocity());
+                masterManager.poll(this, currentTile, {position.x, position.y}, getVelocity());
                 lastTile = currentTile;
             }
+
             moveLinearly();
         }
 
@@ -564,8 +581,9 @@ public:
         window.draw(characterBase);
         window.draw(healthBarBase);
         window.draw(healthBarStatus);
-        window.draw(tracerDot);
     }
+
+    void updateTexture(int a) override {}
 };
 
 class Wizard : public Enemy
@@ -575,10 +593,13 @@ class Wizard : public Enemy
 public:
     Wizard()
     {
-        characterBase.setTexture(&testGoblin);
-        characterBase.setSize({78.f, 106.f});
-        characterBase.setOrigin({39.f, 53.f});
+        characterBase.setTexture(&wizard_texture[0]);
+        characterBase.setSize({68.f, 68.f});
+        characterBase.setScale({0.6f, 0.6f});
+        characterBase.setOrigin({32.f, 42.f});
+        tracerDot.setPosition(position);
         characterBase.setPosition(position);
+
         health = 300;
         maxHealth = 300;
         moveSpeed = 1.5f;
@@ -593,11 +614,13 @@ public:
         if (clk.getElapsedTime().asMilliseconds() >= 20)
         {
             clk.restart();
-            currentFrame = (currentFrame + 1) % 8;
-            int r = currentFrame / 3, c = currentFrame % 3;
-            characterBase.setTextureRect(IntRect({c * 256, r * 256}, {256, 256}));
+            currentFrame = (currentFrame + 1) % 10;
+            int r = currentFrame / 5, c = currentFrame % 5;
+            if (r == 1 && c > 2)
+                r = c = 0;
+            characterBase.setTextureRect(IntRect({c * 68, r * 68}, {68 - 20, 68}));
             Vector2f pos_ = characterBase.getPosition();
-            auto [row_, col_] = screenToTile(pos_.x, pos_.y -10);
+            auto [row_, col_] = screenToTile(pos_.x, pos_.y - 10);
             Vector2i currentTile_ = {row_, col_};
             if (currentTile_ == pendingTile)
                 pendingCount++;
@@ -608,14 +631,16 @@ public:
             }
             if (pendingCount >= 2 && currentTile_ != lastTile)
             {
-                if(vanishClock.getElapsedTime().asSeconds() <= 3){
+                if (vanishClock.getElapsedTime().asSeconds() <= 3)
+                {
                     masterManager.poll(this, currentTile_, {position.x, position.y - 30.f}, getVelocity());
                 }
                 lastTile = currentTile_;
             }
             if (checkEndTile(row_, col_))
                 return;
-            int dir_ = (lastTile.x >= 0) ? grid[lastTile.x][lastTile.y]->getDirection(): grid[row_][col_]->getDirection();
+            int dir_ = (lastTile.x >= 0) ? grid[lastTile.x][lastTile.y]->getDirection() : grid[row_][col_]->getDirection();
+            updateTexture(dir_);
             switch (dir_)
             {
             case 1:
@@ -630,22 +655,34 @@ public:
             case 4:
                 moveUp();
                 break;
-                default:
+            default:
                 break;
             }
         }
         updateStatus();
-        if(vanishClock.getElapsedTime().asSeconds()<= 3){
+        if (vanishClock.getElapsedTime().asSeconds() <= 3)
+        {
             window.draw(characterBase);
             window.draw(healthBarBase);
             window.draw(healthBarStatus);
         }
-        else if(vanishClock.getElapsedTime().asSeconds()>=5){
+        else if (vanishClock.getElapsedTime().asSeconds() >= 5)
+        {
             vanishClock.restart();
         }
     }
+    void updateTexture(int a) override
+    {
+        if (a == 1)
+            characterBase.setTexture(&wizard_texture[0]);
+        else if (a == 2)
+            characterBase.setTexture(&wizard_texture[1]);
+        else if (a == 3)
+            characterBase.setTexture(&wizard_texture[2]);
+        else if (a == 4)
+            characterBase.setTexture(&wizard_texture[3]);
+    }
 };
-
 
 Enemy *enemies[20] = {};
 int enemyCount = 0;
@@ -683,14 +720,10 @@ bool waveInProgress = false;
 
 struct WaveConfig
 {
-    int goblins, tanks, flashDudes, jahaaz , wizard;
+    int goblins, tanks, flashDudes, jahaaz, wizard;
 };
-WaveConfig waves[5] = {
-    {1, 0, 0, 0,0},
-    {0, 0, 10, 0,0},
-    {0, 0, 20, 0,0},
-    {4, 1, 0, 0,0},
-    {4, 1, 1, 1,0}};
+
+WaveConfig waves[5];
 
 int toSpawnGoblin = 0, toSpawnTank = 0, toSpawnFlash = 0, toSpawnJahaaz = 0, toSpawnWizard;
 int totalInWave = 0;
@@ -723,7 +756,7 @@ void startWave(int waveIndex)
     spawnClock.restart();
     towerMenuEvents.pause();
     anchorHover.pause();
-    spawnButton.setFillColor(Color(0, 0, 0, 100));
+    spawnButton.setFillColor(Color(255, 255, 0, 0));
     cerr << "Wave " << waveIndex + 1 << " starting\n";
 }
 
@@ -732,7 +765,7 @@ void updateWaves()
     if (!waveInProgress)
         return;
 
-    bool doneSpawning = (toSpawnGoblin == 0 && toSpawnTank == 0 && toSpawnFlash == 0 && toSpawnJahaaz == 0 && toSpawnWizard==0);
+    bool doneSpawning = (toSpawnGoblin == 0 && toSpawnTank == 0 && toSpawnFlash == 0 && toSpawnJahaaz == 0 && toSpawnWizard == 0);
 
     if (!doneSpawning && spawnClock.getElapsedTime().asMilliseconds() >= 1500)
     {
@@ -757,7 +790,8 @@ void updateWaves()
             spawnEnemy(new Jahaaz());
             toSpawnJahaaz--;
         }
-        else if(toSpawnWizard > 0){
+        else if (toSpawnWizard > 0)
+        {
             spawnEnemy(new Wizard());
             toSpawnWizard--;
         }
@@ -773,8 +807,7 @@ void updateWaves()
     }
 
     float prog = (totalInWave > 0) ? (float)dead / totalInWave : 0.f;
-    unsigned int br = (unsigned int)(prog * 255); // Just For Safety...
-    spawnButton.setFillColor(Color(br, br, br));
+    spawnButton.setFillColor(Color(255, 255, 255, (unsigned int)(prog * 255)));
 
     if (doneSpawning && allDead())
     {
@@ -783,10 +816,9 @@ void updateWaves()
         spawnButton.setFillColor(Color::White);
         towerMenuEvents.resume();
         anchorHover.resume();
-        if (currentWave >= 4)
+        if (currentWave >= 5)
         {
             levelComplete = true;
-            cerr << "Level Complete!\n";
         }
     }
 }
@@ -802,49 +834,43 @@ void onSpawnButtonClick()
 
 extern EventHandler inGameEvents;
 extern displayQueue queue;
-
-bool overlayActive = false;
-bool overlayIsWin = false;
-Text overlayTitle(infoFont);
-Text overlayReplay(infoFont);
-Text overlayMenu(infoFont);
-RectangleShape overlayBox;
-RectangleShape replayBtn, menuBtn;
+Texture scrollPaper("./Assets/overlayFinal.png");
+Texture overlayButton_texture("./Assets/overlayButton.png");
 
 void initOverlay()
 {
     overlayBox.setSize({500.f, 280.f});
     overlayBox.setOrigin({250.f, 140.f});
     overlayBox.setPosition({600.f, 350.f});
-    overlayBox.setFillColor(Color(20, 20, 30, 230));
-    overlayBox.setOutlineColor(Color(200, 180, 100));
-    overlayBox.setOutlineThickness(3.f);
+    overlayBox.setTexture(&scrollPaper);
+    overlayBox.setTextureRect({{0, 0}, {2528, 1696}});
+    // overlayBox.setFillColor(Color(66, 49, 49));
+    overlayDarkEffect.setFillColor(Color(13, 22, 31, 75));
 
     overlayTitle.setCharacterSize(42);
-    overlayTitle.setFillColor(Color(220, 180, 60));
+    overlayTitle.setFillColor(Color(25, 18, 87));
     overlayTitle.setPosition({430.f, 240.f});
 
-    replayBtn.setSize({180.f, 50.f});
-    replayBtn.setFillColor(Color(60, 120, 60));
-    replayBtn.setOutlineColor(Color::White);
-    replayBtn.setOutlineThickness(2.f);
-    replayBtn.setPosition({390.f, 340.f});
+    replayBtn.setSize({150.f, 50.f});
+    replayBtn.setFillColor(Color(255, 255, 255));
+    replayBtn.setPosition({390.f, 360.f});
+    replayBtn.setTexture(&overlayButton_texture);
+    replayBtn.setTextureRect({{42, 144}, {219, 117}});
 
-    menuBtn.setSize({180.f, 50.f});
-    menuBtn.setFillColor(Color(120, 60, 60));
-    menuBtn.setOutlineColor(Color::White);
-    menuBtn.setOutlineThickness(2.f);
-    menuBtn.setPosition({630.f, 340.f});
+    menuBtn.setSize({150.f, 50.f});
+    menuBtn.setPosition({615.f, 360.f});
+    menuBtn.setTexture(&overlayButton_texture);
+    menuBtn.setTextureRect({{42, 144}, {219, 117}});
 
     overlayReplay.setCharacterSize(22);
-    overlayReplay.setFillColor(Color::White);
+    overlayReplay.setFillColor(Color::Black);
     overlayReplay.setString("Replay");
-    overlayReplay.setPosition({445.f, 353.f});
+    overlayReplay.setPosition({430.f, 365.f});
 
     overlayMenu.setCharacterSize(22);
     overlayMenu.setFillColor(Color::White);
     overlayMenu.setString("Main Menu");
-    overlayMenu.setPosition({648.f, 353.f});
+    overlayMenu.setPosition({648.f, 365.f});
 }
 
 void showOverlay(bool win)
@@ -852,7 +878,7 @@ void showOverlay(bool win)
     overlayActive = true;
     overlayIsWin = win;
     overlayTitle.setString(win ? "Level Complete!" : "Game Over");
-    overlayTitle.setFillColor(win ? Color(100, 220, 100) : Color(220, 80, 80));
+    overlayTitle.setFillColor(win ? Color(0, 0, 0) : Color(220, 80, 80));
     towerMenuEvents.pause();
     anchorHover.pause();
     inGameEvents.pause();
@@ -873,11 +899,12 @@ void resetPlots()
             }
         }
     }
-    cerr << "resetPlots() executed succesfully...\n";
+    cerr << "DESTRUCTION : resetPlots() executed succesfully...\n";
 }
 void resetLevel()
 {
-
+    bulletDisplayQueue = TypedDisplayQueue<Bullet, Enemy>();
+    allTowers = TowerManager<Tower>();
     playerHealth = 5;
     gameOver = false;
     levelComplete = false;
@@ -897,13 +924,14 @@ void resetLevel()
     anchorHover.resume();
     inGameEvents.resume();
     resetPlots();
-    cerr << "Level Reset Performed Succesfully....\n";
+    cerr << "DESTRUCTION : Level Reset Performed Succesfully....\n";
 }
 
 bool drawOverlay(RenderWindow &window)
 {
     if (!overlayActive)
         return true;
+    window.draw(overlayDarkEffect);
     window.draw(overlayBox);
     window.draw(overlayTitle);
     window.draw(replayBtn);
@@ -922,38 +950,109 @@ void handleOverlayClick(const Event &ev)
         Vector2f pos = Vector2f(mb->position);
         if (replayBtn.getGlobalBounds().contains(pos))
         {
+            if (gamePaused)
+            {
+                inGameEvents.resume();
+                overlayPromptEvents.pause();
+                gamePaused = false;
+                overlayReplay.setString("Replay");
+                overlayActive = false;
+                towerMenuEvents.resume();
+                anchorHover.resume();
+                stopDrawing = true;
+                handler.resume();
+                return;
+            }
             resetLevel();
+            if (levelComplete)
+            {
+                currentGold = max(currentGold, tempGold);
+            }
+            saveBankData();
             inGameEvents.resume();
-            towerMenuEvents.pause();
+            towerMenuEvents.resume();
             anchorHover.resume();
             inGameEvents.resume();
-            cerr << "Event Manger States Toggled Succesfully....\n";
         }
         if (menuBtn.getGlobalBounds().contains(pos))
         {
-            queue = displayQueue();
+            if (gamePaused)
+            {
+                gamePaused = false;
+            }
+            if (levelComplete)
+            {
+                currentGold = currentGold;
+            }
+            else
+            {
+                currentGold = tempGold;
+            }
+            saveBankData();
             resetLevel();
+            queue = displayQueue();
             destroyGrid();
-            cerr << "NCA REPORT = 1\n";
             overlayActive = false;
             stopMenu = false;
             extern bool goBackToMenu;
             goBackToMenu = true;
             inGameEvents.pause();
-            cerr << "NCA REPORT = 2\n";
             anchorHover.pause();
             towerMenuEvents.pause();
             overlayPromptEvents.pause();
             queue.pushBack(displayMenu);
-            cerr << "NCA REPORT = 3\n";
             mainMenuClicks.resume();
-            cerr << "NCA REPORT = 4\n";
+        }
+    }
+    if (const auto *mb = ev.getIf<Event::MouseMoved>())
+    {
+        Vector2f pos = Vector2f(mb->position);
+        if (replayBtn.getGlobalBounds().contains(pos))
+        {
+            replayBtn.setTextureRect({{346, 139}, {222, 127}});
+        }
+        else
+        {
+            replayBtn.setTextureRect({{42, 144}, {219, 117}});
+        }
+        if (menuBtn.getGlobalBounds().contains(pos))
+        {
+            menuBtn.setTextureRect({{346, 139}, {222, 127}});
+        }
+        else
+        {
+            menuBtn.setTextureRect({{42, 144}, {219, 117}});
         }
     }
 }
 
 void loadLevel(int level)
 {
+    if (level == 1)
+    {
+        // Focus: Introductory speed and health
+        waves[0] = {10, 0, 0, 0, 0}; // Goblins only
+        waves[1] = {15, 2, 0, 0, 0}; // Intro TankDude
+        waves[2] = {10, 0, 5, 0, 0}; // Intro FlashDude sprinters
+        waves[3] = {5, 5, 5, 0, 0};  // Heavy mix of ground units
+        waves[4] = {10, 2, 0, 1, 0}; // Boss wave: Goblins + Jahaaz
+    }
+    else if (level == 2)
+    {
+        waves[0] = {0, 0, 0, 0, 8};    // Pure Wizard wave
+        waves[1] = {10, 0, 5, 0, 5};   // FlashDudes + Wizards
+        waves[2] = {0, 10, 0, 0, 5};   // TankDudes shielding Wizards
+        waves[3] = {0, 0, 10, 2, 0};   // Double Jahaaz + FlashDude swarm
+        waves[4] = {10, 5, 10, 1, 10}; // Total chaos
+    }
+    else if (level == 3)
+    {
+        waves[0] = {0, 5, 15, 0, 0};    // Very fast start
+        waves[1] = {0, 0, 0, 5, 0};     // Air Raid: 5 Jahaaz
+        waves[2] = {0, 15, 0, 0, 15};   // Tanky units and vanishing Wizards
+        waves[3] = {25, 0, 20, 0, 0};   // The Swarm: Massive numbers
+        waves[4] = {15, 10, 10, 3, 10}; // Final Stand
+    }
     currentWave = 0;
     levelComplete = false;
     waveInProgress = false;
@@ -972,12 +1071,18 @@ bool drawLevel(RenderWindow &window)
 {
     if (!overlayActive)
     {
+        extern int tempGold;
         if (gameOver)
+        {
             showOverlay(false);
+        }
         else if (levelComplete)
+        {
             showOverlay(true);
+        }
     }
-    updateWaves();
+    if (!gamePaused)
+        updateWaves();
     drawEnemies(window);
     if (overlayActive)
         drawOverlay(window);
